@@ -524,6 +524,13 @@ def level_info(world):
     return spawn, datetime.datetime.fromtimestamp(max(times), datetime.timezone.utc) if times else datetime.datetime.now(datetime.timezone.utc)
 
 
+def players_ever(world):
+    """How many players have ever joined: the world keeps players/NAME.dat for each (Bedrock players through a proxy
+    often have names starting with "."), counted once per name whatever the case. None without a players folder."""
+    try: return len({f[:-4].lower() for f in os.listdir(os.path.join(world, 'players')) if f.endswith('.dat')})
+    except OSError: return None
+
+
 def sha(p):
     h = hashlib.sha1()
     with open(p, 'rb') as f:
@@ -615,6 +622,7 @@ def build(a):
     for p in places: p['y'] = height(p['world'], p['x'], p['z'])
     info = {'id': day, 'title': a.title, 'taken': when.strftime('%Y-%m-%d %H:%M'), 'spawn': spawn,
             'spawnY': height('overworld', *spawn) if spawn else None, 'live': a.live,
+            'players': None if a.no_player_count else players_ever(world),
             'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places}
     for f in os.listdir(WEB):
         shutil.copy(os.path.join(WEB, f), os.path.join(out, f))
@@ -635,6 +643,7 @@ def main():
     ap.add_argument('--places', help='a text file of named places: "overworld X Z Name" per line')
     ap.add_argument('--spawn', help='X,Z to mark as spawn and start at (default: the world\'s spawn point)')
     ap.add_argument('--live', help='URL of a players.json for live player dots (see the README)')
+    ap.add_argument('--no-player-count', action='store_true', help='hide the "Visitors" counter (players who ever joined)')
     ap.add_argument('--cache', help='where finished region pictures are kept between runs (default: OUT-cache)')
     ap.add_argument('--jobs', type=int, help='how many processes draw at once (default: CPU cores - 1)')
     build(ap.parse_args())

@@ -122,6 +122,17 @@
   .live b::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
                    background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }       /* the hat layer of the skin */
   .minidot { background: var(--c, #7cff6b); border: var(--u) solid #000; }
+  /* "Visitors": players who ever joined (map.json "players"), an old-web hit counter: each digit in its own sunk slot */
+  #visits { bottom: 16px; right: 14px; padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
+            display: grid; gap: calc(2 * var(--u)); justify-items: center; }
+  #visits .lbl { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #prefs:not([hidden]) ~ #visits { bottom: 120px; }
+  #odo { display: flex; gap: var(--u); }
+  #odo i { font-style: normal; display: block; width: calc(8 * var(--u)); padding: var(--u) 0 calc(2 * var(--u));
+           text-align: center; background: #2e2828; color: var(--text); text-shadow: var(--u) var(--u) 0 #000;
+           border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+           border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
+  #odo i.lead { color: #6a5f5f; text-shadow: none; }          /* the leading zeros, dimmed like an unlit wheel */
   @media (hover: none) { #coords { display: none; } }
   @media (max-width: 600px) {
     #side { width: calc(152 * var(--u)); }
@@ -155,6 +166,8 @@
   <div class="row"><button id="gear" aria-expanded="false">Settings</button></div>
 </div>
 <div id="coords" class="panel">x –, z –</div>
+<!-- how many players have ever joined (counted by beta_map.py from the world's player files when it drew the map) -->
+<div id="visits" class="panel" hidden><span class="lbl">Visitors</span><span id="odo" role="img"></span></div>
 <script src="leaflet.js"></script>
 <script>
 (async function () {
@@ -163,6 +176,14 @@
   catch (e) { document.getElementById('asof').textContent = 'Not drawn yet'; return; }
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAABQWGgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
   if (m.title) document.getElementById('name').textContent = document.title = m.title;
+  // "Visitors" (bottom right): players who have ever joined, six digits, the leading zeros dimmed
+  if (Number.isFinite(m.players)) {
+    const s = String(Math.max(0, Math.floor(m.players))).padStart(6, '0'), lead = s.search(/[1-9]|.$/);
+    const odo = document.getElementById('odo');
+    odo.replaceChildren(...[...s].map((c, i) => { const e = document.createElement('i'); e.textContent = c; if (i < lead) e.className = 'lead'; return e; }));
+    odo.setAttribute('aria-label', m.players + ' players have joined');
+    document.getElementById('visits').hidden = false;
+  }
   // when the world was last saved (UTC)
   const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
   document.getElementById('asof').textContent =

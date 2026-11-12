@@ -46,6 +46,7 @@ changed (the same world again: under 30 seconds).
 | `--places places.txt` | Named places on the map, one per line: `overworld 120 -340 My Castle` (or `nether`); `#` starts a comment |
 | `--spawn X,Z` | Where the spawn marker goes and where the map opens (default: the world's spawn point) |
 | `--live URL` | Live player dots (see below) |
+| `--no-player-count` | Hide the "Visitors" counter (bottom right: how many players have ever joined the server, counted from the world's `players` folder when the map is drawn) |
 | `--cache DIR` | Where the region pictures are kept between runs (default: the output folder's name plus `-cache`) |
 | `--jobs N` | How many processes draw at once (default: your CPU cores minus one) |
 
