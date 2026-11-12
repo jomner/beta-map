@@ -1,7 +1,7 @@
 # beta-map
 
-An isometric web map for Minecraft Beta worlds. Every block is drawn as a tiny 4-pixel cube, from all four
-directions, and cut into tiles you can pan and zoom like an online map. It works for the Overworld and the Nether.
+An isometric web map for Minecraft Beta worlds. Every block is drawn as a 4-pixel cube, from all four
+directions, and cut into tiles.
 
 ![The map](screenshot.png)
 
@@ -13,12 +13,6 @@ directions, and cut into tiles you can pan and zoom like an online map. It works
 ## What worlds it reads
 
 Beta worlds in the **McRegion** format: Beta 1.3 to Beta 1.8, where the world folder has `region/r.X.Z.mcr` files.
-That covers Beta 1.7.3 servers of any kind (vanilla, Poseidon, Betrock++ and others).
-
-It does **not** read:
-- Alpha or early Beta worlds (before Beta 1.3), which keep chunks in many small folders
-- Release 1.2 and newer (`.mca` Anvil files)
-- console editions (Wii U, Xbox, PlayStation and so on), which use their own formats
 
 ## Drawing a map
 
@@ -67,7 +61,7 @@ grows too big over time, push the site as a fresh single commit (`git checkout -
 
 ## Live player dots (optional)
 
-The page can show where players are right now, moving smoothly, with their name and skin face. It reads a small JSON
+The page can show where players are with their name and skin face. It reads a small JSON
 file every 2 seconds:
 
 ```json
