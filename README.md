@@ -1,6 +1,6 @@
 # beta-map
 
-An isometric web map for Minecraft Beta 1.7.3 worlds. Every block is drawn as a tiny 4-pixel cube, from all four
+An isometric web map for Minecraft Beta worlds. Every block is drawn as a tiny 4-pixel cube, from all four
 directions, and cut into tiles you can pan and zoom like an online map. It works for the Overworld and the Nether.
 
 ![The map](screenshot.png)
