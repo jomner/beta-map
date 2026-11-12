@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beta map</title>
+<!-- beta-map (MIT licence): drawn by beta_map.py, which writes map.json next to this page -->
+
+<!-- Leaflet 1.9.4 (BSD 2-Clause, Leaflet-LICENSE.txt), served from here so the map doesn't depend on a CDN -->
+<link rel="stylesheet" href="leaflet.css">
+<style>
+  /* Monocraft: a free (SIL Open Font License) font made to look like Minecraft's; licence in Monocraft-OFL.txt */
+  @font-face { font-family: Monocraft; src: url("Monocraft.ttf") format("truetype"); font-display: swap; }
+  /* Look: Pocket Edition's crafting screen, measured pixel by pixel from a 1920x1080 screenshot (2026-11-11).
+     Everything is built on one "screen pixel" --u (2 px; 1 px on phones), like the game's GUI scale:
+     - text: Monocraft draws one glyph pixel per 1/9 em, so font-size is 9u and every letter pixel is exactly u;
+       white text gets a u-wide shadow, secondary text is "engraved" (dark grey, light shadow)
+     - the outer frame (title, side panel, coordinates): 1u black outline, 2u bevel (light top left, dark bottom right)
+     - buttons: 2u light top, 1u light left, 1u near-black right and bottom; pressed: the colours swap and the label
+       drops 1u
+     - sunk wells (minimap, the direction box): the opposite of a button
+     Bevels are CSS borders, so corners meet on the diagonal the way the game's do. Colours are the screenshot's. */
+  :root { --u: 2px;
+          --bg: #2a2626; --edge: #000;
+          --face: #938681; --face-hi: #b9b0ac; --face-lo: #534a4f;
+          --btn: #978884; --btn-hover: #a69793; --btn-hi: #bab0aa; --btn-lo: #2a2829;
+          --down: #726467; --down-hi: #b9aeab; --down-lo: #2b2628;
+          --well: #a89995;
+          --text: #fff; --shadow: #3f3f3f; --dim: #6f6669; --dim-shadow: #c3b9b4;
+          --font: Monocraft, ui-monospace, Consolas, monospace; }
+  @media (max-width: 600px) { :root { --u: 1px; } }
+  * { border-radius: 0 !important; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: calc(9 * var(--u)) / calc(10 * var(--u)) var(--font); }
+  .leaflet-container { background: var(--bg); font: calc(9 * var(--u)) / calc(10 * var(--u)) var(--font); }
+  #map { position: absolute; inset: 0; }
+  .leaflet-tile { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  /* the outer frame */
+  .panel { position: absolute; z-index: 1000; box-sizing: border-box; background: var(--face);
+           text-shadow: var(--u) var(--u) 0 var(--shadow);
+           border: calc(2 * var(--u)) solid; border-color: var(--face-hi) var(--face-lo) var(--face-lo) var(--face-hi);
+           box-shadow: 0 0 0 var(--u) var(--edge); }
+  #title { top: 14px; left: 62px; padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
+           max-width: calc(100vw - 330px); }
+  #title h1 { margin: 0; font: inherit; }
+  #title p { margin: var(--u) 0 0; color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #title p#online { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
+  #side { top: 14px; right: 14px; width: calc(120 * var(--u)); padding: calc(3 * var(--u));
+          display: grid; gap: calc(3 * var(--u)); }
+  #coords { bottom: 16px; left: 14px; padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u)); }
+  #prefs { bottom: 16px; right: 14px; width: calc(85 * var(--u)); padding: calc(3 * var(--u));
+           display: grid; gap: calc(3 * var(--u)); }
+
+  /* sunk wells */
+  #well, .row span { box-sizing: border-box; background: var(--well); border: solid;
+           border-width: calc(2 * var(--u)) var(--u) calc(2 * var(--u)) var(--u);
+           border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
+  #well { padding: calc(2 * var(--u)); }
+  #mini { width: 100%; aspect-ratio: 1; cursor: pointer; display: block; }
+  .row { display: flex; gap: calc(3 * var(--u)); }
+  .row span { flex: 2; display: grid; place-items: center; color: var(--dim);
+              text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+
+  /* buttons */
+  .row button, .leaflet-bar a, .leaflet-bar a:first-child, .leaflet-bar a:last-child {
+    box-sizing: border-box; background: var(--btn); color: var(--text); font: inherit; cursor: pointer;
+    text-shadow: var(--u) var(--u) 0 var(--shadow); border: solid !important;
+    border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u) !important;
+    border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi) !important;
+    box-shadow: none; }
+  .row button { flex: 1; padding: calc(3 * var(--u)) var(--u) calc(4 * var(--u)); }
+  .row button:hover, .leaflet-bar a:hover { background: var(--btn-hover); color: var(--text); }
+  .row button:focus-visible, .leaflet-bar a:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
+  .row button:active, .row button[aria-pressed="true"], .leaflet-bar a:active {
+    background: var(--down); padding-top: calc(4 * var(--u)); padding-bottom: calc(3 * var(--u));
+    border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u) !important;
+    border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo) !important; }
+  .row button.turn { flex: 0 0 calc(20 * var(--u)); padding: calc(3 * var(--u)) 0 calc(4 * var(--u)); }
+  .row button.turn:active, .row button.turn[aria-pressed] { padding: calc(4 * var(--u)) 0 calc(3 * var(--u)); }
+  .turn svg { width: calc(10 * var(--u)); height: calc(10 * var(--u)); display: block; margin: 0 auto;
+              shape-rendering: crispEdges; filter: drop-shadow(var(--u) var(--u) 0 var(--shadow)); }
+  #right svg { transform: scaleX(-1); filter: drop-shadow(calc(-1 * var(--u)) var(--u) 0 var(--shadow)); }
+  #settings .row span { flex: 1; justify-items: start; padding-left: calc(4 * var(--u)); color: var(--text);
+                        text-shadow: var(--u) var(--u) 0 var(--shadow); }
+
+  /* Leaflet zoom buttons */
+  .leaflet-top.leaflet-left { top: 4px; left: 4px; }
+  .leaflet-bar { border: 0 !important; box-shadow: none !important; display: grid; gap: calc(3 * var(--u)); }
+  .leaflet-bar a, .leaflet-bar a:first-child, .leaflet-bar a:last-child {
+    width: calc(19 * var(--u)) !important; height: calc(19 * var(--u)) !important; display: grid !important;
+    place-items: center; line-height: 1 !important; padding-bottom: var(--u);
+    box-shadow: 0 0 0 var(--u) var(--edge); }
+  .leaflet-bar a:active { padding: var(--u) 0 0; }
+  .leaflet-bar a.leaflet-disabled { background: var(--btn); color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+
+  /* map labels and markers, on the same pixel grid */
+  .leaflet-tooltip { background: var(--face); color: var(--text); font: inherit; padding: var(--u) calc(3 * var(--u)) calc(2 * var(--u));
+                     text-shadow: var(--u) var(--u) 0 var(--shadow); border: var(--u) solid;
+                     border-color: var(--face-hi) var(--face-lo) var(--face-lo) var(--face-hi);
+                     box-shadow: 0 0 0 var(--u) var(--edge); }
+  .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before, .leaflet-tooltip-left:before, .leaflet-tooltip-right:before { display: none; }
+  .spawn { background: #f2c94c; border: var(--u) solid #14161a; }
+  .place { background: none; border: 0; }
+  .place span { position: absolute; left: 50%; bottom: calc(2 * var(--u)); transform: translateX(-50%); white-space: nowrap;
+                font: inherit; color: #fff; text-shadow: var(--u) var(--u) 0 var(--shadow); pointer-events: none; }
+  .place i { position: absolute; left: 50%; bottom: calc(-2 * var(--u)); width: calc(3 * var(--u)); height: calc(3 * var(--u));
+             margin-left: calc(-2 * var(--u)); background: #fff; border: var(--u) solid #000; }
+  /* live players: their skin's face (hat layer on top), one skin pixel = u, and their name in their locator bar colour */
+  .live { background: none; border: 0; }
+  .live span { position: absolute; left: 50%; bottom: calc(6 * var(--u)); transform: translateX(-50%); white-space: nowrap;
+               font: inherit; color: var(--c, #7cff6b);
+               /* a solid 1u outline: all 8 neighbours (diagonals alone leave gaps beside straight edges) */
+               text-shadow: var(--u) 0 0 #000, calc(-1 * var(--u)) 0 0 #000, 0 var(--u) 0 #000, 0 calc(-1 * var(--u)) 0 #000,
+                            var(--u) var(--u) 0 #000, calc(-1 * var(--u)) calc(-1 * var(--u)) 0 #000,
+                            var(--u) calc(-1 * var(--u)) 0 #000, calc(-1 * var(--u)) var(--u) 0 #000; pointer-events: none; }
+  .live b { position: absolute; left: 50%; bottom: calc(-5 * var(--u)); width: calc(8 * var(--u)); height: calc(8 * var(--u));
+            margin-left: calc(-5 * var(--u)); border: var(--u) solid #000; background-color: var(--c, #7cff6b);
+            background-repeat: no-repeat; background-size: calc(64 * var(--u)) auto;
+            background-position: calc(-8 * var(--u)) calc(-8 * var(--u)); image-rendering: pixelated; }
+  .live b::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
+                   background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }       /* the hat layer of the skin */
+  .minidot { background: var(--c, #7cff6b); border: var(--u) solid #000; }
+  @media (hover: none) { #coords { display: none; } }
+  @media (max-width: 600px) {
+    #side { width: calc(152 * var(--u)); }
+    #prefs { width: calc(152 * var(--u)); }
+    #title { max-width: calc(100vw - 236px); }
+    /* finger-sized buttons; the art stays 1 px per screen pixel, they're just bigger boxes */
+    .leaflet-bar a, .leaflet-bar a:first-child, .leaflet-bar a:last-child { width: 32px !important; height: 32px !important; }
+    .row button { padding: 7px var(--u) 8px; }
+    .row button:active, .row button[aria-pressed="true"] { padding-top: 8px; padding-bottom: 7px; }
+    .row button.turn { flex-basis: 32px; padding: 9px 0 10px; }
+    .row button.turn:active, .row button.turn[aria-pressed] { padding: 10px 0 9px; }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="online" hidden></p></div>
+<div id="side" class="panel">
+  <div id="well"><div id="mini" title="Click to go there"></div></div>
+  <div class="row" role="group" aria-label="World">
+    <button data-world="overworld">Overworld</button><button data-world="nether">Nether</button>
+  </div>
+  <div class="row">
+    <button id="left" class="turn" title="Turn left" aria-label="Turn left"></button><span id="facing" title="The direction the view faces"></span><button id="right" class="turn" title="Turn right" aria-label="Turn right"></button>
+  </div>
+</div>
+<!-- Settings: hidden, kept for later. Show it by removing "hidden"; options go in #settings as
+     <div class="row"><span>Name</span><button id="...">Off</button></div>, plus an entry in SWITCHES below -->
+<div id="prefs" class="panel" hidden>
+  <div id="settings" hidden></div>
+  <div class="row"><button id="gear" aria-expanded="false">Settings</button></div>
+</div>
+<div id="coords" class="panel">x –, z –</div>
+<script src="leaflet.js"></script>
+<script>
+(async function () {
+  let m;
+  try { m = await (await fetch('map.json', { cache: 'no-store' })).json(); }
+  catch (e) { document.getElementById('asof').textContent = 'Not drawn yet'; return; }
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAABQWGgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+  if (m.title) document.getElementById('name').textContent = document.title = m.title;
+  // when the world was last saved (UTC)
+  const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
+  document.getElementById('asof').textContent =
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) + ', ' + m.taken.slice(11) + ' UTC';
+
+  // Main view: 3D (see beta_map.py). View k is the world turned k quarter turns, (x, z) -> (-z, x) each, then drawn
+  // from the south-east: block (x', z') at height y is a 4 px cube at screen x = 2(x' - z'), y = (x' + z') - 2y.
+  // Heights come from the height tiles (red = top block's height, green = there's a column), so positions are exact.
+  // Minimap: the same world top-down, north up, 1 px per block.
+  const WORLDS = {
+    overworld: { iso: 'iso', mini: 'flat', height: 'height', ground: 66 },
+    nether:    { iso: 'nether-iso', mini: 'nether', height: 'nether-height', ground: 45 },
+  };
+  const FACING = ['NW', 'SW', 'SE', 'NE'];
+  let world = null, rot = 0;
+  const turn = (x, z, k) => { for (let i = 0; i < k; i++) [x, z] = [-z, x]; return [x, z]; };
+  const unturn = (x, z, k) => { for (let i = 0; i < k; i++) [x, z] = [z, -x]; return [x, z]; };
+
+  // ---- heights
+  const H = {};                                         // "world/rx_rz" -> Uint8ClampedArray (RGBA) or null
+  function heightAt(x, z) {                             // number, null (no column), or undefined (still loading)
+    const key = world + '/' + (x >> 9) + '_' + (z >> 9);
+    if (!(key in H)) { loadHeights(key, x >> 9, z >> 9); return undefined; }
+    const t = H[key];
+    if (t === undefined) return undefined;
+    if (t === null) return null;
+    const i = 4 * (((z & 511) << 9) + (x & 511));
+    return t[i + 1] ? t[i] : null;
+  }
+  const waiting = {};
+  function loadHeights(key, rx, rz) {
+    H[key] = undefined;
+    return waiting[key] = new Promise(done => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = c.height = 512;
+        const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+        H[key] = g.getImageData(0, 0, 512, 512).data; done(); loaded();
+      };
+      img.onerror = () => { H[key] = null; done(); loaded(); };
+      img.src = 'tiles/' + m.id + '/' + WORLDS[world].height + '/0/' + rx + '_' + rz + '.png';
+    });
+  }
+  async function heightNow(x, z) {
+    const key = world + '/' + (x >> 9) + '_' + (z >> 9);
+    if (!(key in H)) loadHeights(key, x >> 9, z >> 9);
+    if (H[key] === undefined) await waiting[key];
+    const h = heightAt(x, z);
+    return h == null ? WORLDS[world].ground : h;
+  }
+
+  // ---- block <-> map position
+  function toLL(x, z, y) {                              // the top of block (x, y, z)
+    const [a, b] = turn(x + .5, z + .5, rot);
+    return L.latLng(-((a + b) - 2 * y), 2 * (a - b) + 2);
+  }
+  function guess(p, y) {                                // map position -> (x, z), if the ground there is at y
+    const s = -p.lat + 2 * y, dd = (p.lng - 2) / 2;
+    return unturn((s + dd) / 2, (s - dd) / 2, rot);
+  }
+  function pick(p) {                                    // map position -> [x, z, y] of the block seen there
+    for (let y = 127; y >= 0; y--) {
+      const [x, z] = guess(p, y).map(Math.floor);
+      const h = heightAt(x, z);
+      if (h === undefined) return undefined;
+      if (h !== null && h >= y) return [x, z, y];
+    }
+    return null;
+  }
+  const flatLL = (x, z) => L.latLng(-z, x);
+  const boundsOf = b => b && L.latLngBounds(L.latLng(-b[1], b[0]), L.latLng(-b[3], b[2]));
+  const layerOf = (name, extra) => L.tileLayer('tiles/' + m.id + '/' + name + '/{z}/{x}_{y}.png', Object.assign({
+    tileSize: m.tile, minNativeZoom: m.minZoom, maxNativeZoom: 0, noWrap: true,
+    bounds: boundsOf(m.layers[name] && m.layers[name].bounds), errorTileUrl: BLANK, keepBuffer: 4 }, extra));
+
+  const map = L.map('map', { crs: L.CRS.Simple, minZoom: m.minZoom, maxZoom: 3, zoomSnap: 1, attributionControl: false });
+  const mini = L.map('mini', { crs: L.CRS.Simple, minZoom: m.minZoom, maxZoom: 2, zoomControl: false, attributionControl: false,
+    dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false });
+  let main = null, small = null, outline = null, marks = L.layerGroup().addTo(map);
+
+  // ---- settings (remembered in this browser only)
+  const NONE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';   // see-through
+  const prefs = {};
+  try { Object.assign(prefs, JSON.parse(localStorage.getItem('mapPrefs') || '{}')); } catch (e) { /* defaults */ }
+  prefs.torches = true;    // torches always shown
+  const savePrefs = () => { try { localStorage.setItem('mapPrefs', JSON.stringify(prefs)); } catch (e) { /* fine */ } };
+  // torches: their own see-through tiles over the main view (beta_map.py), only at zoom 0 and in: only the tiles that
+  // have one exist, listed in map.json
+  let torchLayer = null;
+  const TorchLayer = L.TileLayer.extend({
+    getTileUrl(c) { return this.options.have.has(c.x + ',' + c.y) ? L.TileLayer.prototype.getTileUrl.call(this, c) : NONE; }
+  });
+  function drawTorches() {
+    if (torchLayer) { torchLayer.remove(); torchLayer = null; }
+    const name = WORLDS[world].iso + rot + '-torches', info = m.layers[name];
+    if (!prefs.torches || !info || !info.list) return;
+    torchLayer = new TorchLayer('tiles/' + m.id + '/' + name + '/{z}/{x}_{y}.png', { tileSize: m.tile,
+      minZoom: 0, maxZoom: 3, minNativeZoom: 0, maxNativeZoom: 0, noWrap: true, errorTileUrl: NONE, keepBuffer: 4,
+      have: new Set(info.list) }).addTo(map);
+  }
+  // on/off switches in #settings: SWITCHES maps a button id to its pref and what to redo when it changes
+  const SWITCHES = {};                                  // e.g. torches: () => { if (world) drawTorches(); }
+  function showPrefs() {
+    for (const id in SWITCHES) {
+      const b = document.getElementById(id); if (!b) continue;
+      b.setAttribute('aria-pressed', !!prefs[id]); b.textContent = prefs[id] ? 'On' : 'Off';
+    }
+  }
+  for (const id in SWITCHES) {
+    const b = document.getElementById(id);
+    if (b) b.onclick = () => { prefs[id] = !prefs[id]; savePrefs(); showPrefs(); SWITCHES[id](); };
+  }
+  document.getElementById('gear').onclick = e => {
+    const s = document.getElementById('settings'); s.hidden = !s.hidden;
+    e.currentTarget.setAttribute('aria-expanded', !s.hidden); e.currentTarget.setAttribute('aria-pressed', !s.hidden);
+  };
+  showPrefs();
+  // turn buttons: a blocky round arrow (10 x 10 pixels) to match the font; the right one is the same, mirrored
+  const ARROW = [[4,2],[5,2],[6,2],[7,3],[8,4],[8,5],[8,6],[8,7],[7,8],[6,9],[5,9],[4,9],[3,9],[2,8],[1,7],[1,6],[1,5],
+                 [2,2],[3,2],[3,1],[4,0],[3,3],[4,4]];
+  const arrowSvg = '<svg viewBox="0 0 10 10" aria-hidden="true">' +
+    ARROW.map(([x, y]) => '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="currentColor"/>').join('') + '</svg>';
+  document.querySelectorAll('.turn').forEach(b => b.innerHTML = arrowSvg);
+  let target = null, targetLL = null;                   // where show() put the view, until the heights are in
+  let last = null, soon = 0;
+  const coords = document.getElementById('coords');
+
+  async function show(w, x, z, zoom, k) {
+    if (!WORLDS[w] || !m.layers[WORLDS[w].iso + '0']) w = 'overworld';
+    const newWorld = w !== world;
+    world = w; rot = ((k % 4) + 4) % 4;
+    x = Math.floor(x); z = Math.floor(z);
+    const y = await heightNow(x, z);
+    if (main) main.remove();
+    main = layerOf(WORLDS[w].iso + rot, { minZoom: m.minZoom, maxZoom: 3 }).addTo(map);
+    drawTorches();
+    if (newWorld || !small) { if (small) small.remove(); small = layerOf(WORLDS[w].mini, { minZoom: m.minZoom, maxZoom: 2 }).addTo(mini); }
+    map.setView(toLL(x, z, y), zoom, { animate: false });   // a jump: the center is right at once
+    target = [x, z]; targetLL = map.getCenter();
+    marks.clearLayers();
+    if (w === 'overworld' && m.spawn)
+      L.marker(toLL(m.spawn[0], m.spawn[1], m.spawnY ?? WORLDS[w].ground), { icon: L.divIcon({ className: 'spawn', iconSize: [10, 10] }) })
+        .bindTooltip('Spawn ' + m.spawn[0] + ', ' + m.spawn[1]).addTo(marks);
+    for (const p of m.places || []) {
+      if (p.world !== w || (p.name === 'Spawn' && m.spawn)) continue;
+      const mk = L.marker(toLL(p.x, p.z, p.y ?? WORLDS[w].ground), { keyboard: false,
+        icon: L.divIcon({ className: 'place', iconSize: [0, 0], html: '<i></i><span></span>' }) })
+        .bindTooltip(p.name + ' ' + p.x + ', ' + p.z).addTo(marks);
+      mk.getElement().querySelector('span').textContent = p.name;
+    }
+    document.querySelectorAll('[data-world]').forEach(b => b.setAttribute('aria-pressed', b.dataset.world === w));
+    document.getElementById('facing').textContent = FACING[rot];
+    drawLive(true);
+    follow(); save();
+  }
+
+  // ---- live players (optional): map.json "live" is the URL of a players.json, asked every 2 s while the page is
+  // open and visible: {"time": unix seconds, "players": [{"name", "x", "y", "z", "world": "overworld"|"nether"}]}
+  // (extras/livemap.lua writes it on Betrock++). An optional profiles.json next to it gives each player a skin
+  // (a textures.minecraft.net URL) and a colour: {"Name": {"skin": URL, "colour": "#rrggbb"}}. Each dot glides from where it was to the new position over the next 2 s: worked out in
+  // world coordinates and turned into a map position every frame, so zooming and turning never fight it.
+  // A player's feet are on the top of the block under them.
+  const liveMarks = L.layerGroup().addTo(map), miniDots = L.layerGroup().addTo(mini);
+  const live = {};                                      // name -> { mk, mini, world, from, to, t0 }
+  let profiles = {}, profilesAt = 0, zooming = false;
+  const GLIDE = 2000;
+  function toLLf(xf, zf, feet) {
+    const [a, b] = turn(xf, zf, rot);
+    return L.latLng(-((a + b) - 2 * (feet - 1)), 2 * (a - b) + 2);
+  }
+  function now3(e, t) {                                 // where a dot is at time t
+    const k = Math.min(1, (t - e.t0) / GLIDE);
+    return e.from.map((v, i) => v + (e.to[i] - v) * k);
+  }
+  function styleOf(name, el) {                          // face and colour, once profiles.json knows them
+    const pr = profiles[name] || {};
+    const col = /^#[0-9a-f]{6}$/i.test(pr.colour || '') ? pr.colour : null;
+    const skin = /^https:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]+$/i.test(pr.skin || '') ? pr.skin : null;
+    if (col) el.style.setProperty('--c', col);
+    const face = el.querySelector('b');
+    if (face) face.style.backgroundImage = skin ? 'url("' + skin + '")' : 'none';
+  }
+  function place() {                                    // every frame: the dots of the world shown
+    const t = performance.now();
+    for (const e of Object.values(live)) {
+      const [x, y, z] = now3(e, t), here = e.world === world;
+      if (here && !zooming) e.mk.setLatLng(toLLf(x, z, y));
+      if (here) e.mini.setLatLng(flatLL(x, z));
+      if (here !== e.shown) {
+        e.shown = here;
+        if (here) { e.mk.addTo(liveMarks); e.mini.addTo(miniDots); styleOf(e.name, e.mk.getElement()); styleOf(e.name, e.mini.getElement()); }
+        else { liveMarks.removeLayer(e.mk); miniDots.removeLayer(e.mini); }
+      }
+    }
+    requestAnimationFrame(place);
+  }
+  function drawLive() {                                 // after a world change or turn: dots of the new view at once
+    if (!world) return;
+    for (const e of Object.values(live)) e.shown = null;
+    liveMarks.clearLayers(); miniDots.clearLayers();
+  }
+  function update(players) {
+    const t = performance.now(), seen = new Set();
+    for (const p of players) {
+      seen.add(p.name);
+      const pos = [p.x, p.y, p.z];
+      let e = live[p.name];
+      if (!e) {
+        e = live[p.name] = { name: p.name, world: p.world, from: pos, to: pos, t0: t, shown: null,
+          mk: L.marker([0, 0], { keyboard: false, zIndexOffset: 1000,
+            icon: L.divIcon({ className: 'live', iconSize: [0, 0], html: '<b></b><span></span>' }) }).bindTooltip(p.name),
+          mini: L.marker([0, 0], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'minidot', iconSize: [6, 6] }) }) };
+        e.mk.on('add', () => { e.mk.getElement().querySelector('span').textContent = p.name; styleOf(p.name, e.mk.getElement()); });
+        e.mini.on('add', () => styleOf(p.name, e.mini.getElement()));
+        continue;
+      }
+      const cur = now3(e, t), far = Math.hypot(pos[0] - cur[0], pos[2] - cur[2]) > 64;
+      if (p.world !== e.world || far) { e.from = pos; e.world = p.world; e.shown = null; }   // portal or teleport: jump
+      else e.from = cur;
+      e.to = pos; e.t0 = t;
+    }
+    for (const n of Object.keys(live)) if (!seen.has(n)) {
+      liveMarks.removeLayer(live[n].mk); miniDots.removeLayer(live[n].mini); delete live[n];
+    }
+  }
+  async function poll() {
+    if (!m.live || document.visibilityState === 'hidden') return;
+    const el = document.getElementById('online');
+    let players = [];
+    try {
+      const r = await fetch(m.live, { cache: 'no-store' });
+      const d = await r.json();
+      players = (d.players || []).filter(p => typeof p.name === 'string' && isFinite(p.x) && isFinite(p.y) && isFinite(p.z));
+      const old = Date.now() / 1000 - d.time > 30;      // the server isn't writing: down or restarting
+      if (old) players = [];
+      el.hidden = false;
+      el.textContent = old ? 'live: server offline' : '● ' + players.length + ' online';
+      if (players.some(p => !profiles[p.name]) && Date.now() - profilesAt > 10000 || Date.now() - profilesAt > 300000) {
+        profilesAt = Date.now();
+        try {
+          profiles = await (await fetch(m.live.replace(/players\.json$/, 'profiles.json'), { cache: 'no-store' })).json() || {};
+          for (const e of Object.values(live)) if (e.shown) { styleOf(e.name, e.mk.getElement()); styleOf(e.name, e.mini.getElement()); }
+        } catch (e) { /* no skins or colours yet: plain dots */ }
+      }
+    } catch (e) {                                       // the live file isn't reachable: just no dots
+      el.hidden = true;
+    }
+    update(players);
+  }
+
+  // the block at the middle of the screen: exact once the heights along the way are in; until then where show() put
+  // the view (if it hasn't moved since), else a guess at the usual ground height
+  function center(exactOnly) {
+    const c = map.getCenter(), p = pick(c);
+    if (p) return [p[0], p[1]];
+    if (p === undefined && target && targetLL && c.equals(targetLL)) return target;
+    if (p === undefined && exactOnly) return null;
+    return guess(c, WORLDS[world].ground).map(Math.floor);
+  }
+  // more heights arrived: what waited on them can be done now
+  function loaded() {
+    clearTimeout(soon);
+    soon = setTimeout(() => { if (!world) return; follow(); save(); if (last) showCoords(last); }, 50);
+  }
+  // the minimap follows the main view and outlines what it shows
+  function follow() {
+    const b = map.getBounds(), [cx, cz] = center();
+    const hy = heightAt(cx, cz), y = hy == null ? WORLDS[world].ground : hy;
+    const pts = [b.getNorthWest(), b.getNorthEast(), b.getSouthEast(), b.getSouthWest()].map(p => flatLL(...guess(p, y)));
+    mini.setView(flatLL(cx, cz), Math.max(m.minZoom, Math.min(2, map.getZoom() - 3)), { animate: false });
+    if (outline) outline.setLatLngs(pts);
+    else outline = L.polygon(pts, { color: '#fff', weight: 1.5, fill: false, interactive: false }).addTo(mini);
+  }
+  // the minimap: glide there (same view, so just a pan)
+  mini.on('click', async e => {
+    const x = Math.floor(e.latlng.lng), z = Math.floor(-e.latlng.lat);
+    const y = await heightNow(x, z);
+    target = [x, z]; targetLL = toLL(x, z, y);
+    map.flyTo(targetLL, map.getZoom(), { duration: 0.6 });
+    map.once('moveend', () => { targetLL = map.getCenter(); });
+  });
+
+  function save() {
+    const c = world && center(true);
+    if (c) history.replaceState(null, '', '#' + [world, ...c, map.getZoom(), rot].join('/'));
+  }
+  function fromHash() {
+    let h = location.hash.slice(1).split('/');
+    if (h.length === 3) h = ['overworld'].concat(h);                   // old links: #x/z/zoom (flat)
+    if (h.length < 4 || h.slice(1, 4).some(v => v === '' || isNaN(+v))) return null;
+    let [w, x, z, zoom, k] = [h[0], +h[1], +h[2], +h[3], +(h[4] || 0)];
+    if (w === 'flat' || w === 'iso') { if (w === 'flat') zoom -= 2; w = 'overworld'; }   // links from before
+    return WORLDS[w] ? [w, x, z, zoom, isNaN(k) ? 0 : k] : null;
+  }
+
+  document.querySelectorAll('[data-world]').forEach(btn => btn.onclick = () => {
+    const to = btn.dataset.world;
+    if (to === world) return;
+    let [x, z] = center();
+    if (to === 'nether') { x = Math.floor(x / 8); z = Math.floor(z / 8); } else { x *= 8; z *= 8; }
+    show(to, x, z, map.getZoom(), rot);
+  });
+  // view k + 1 turns the picture clockwise on screen (east moves from lower right to lower left)
+  document.getElementById('left').onclick = () => show(world, ...center(), map.getZoom(), rot + 3);
+  document.getElementById('right').onclick = () => show(world, ...center(), map.getZoom(), rot + 1);
+
+  const h = fromHash(), sp = m.spawn || [0, 0];
+  if (h) await show(...h); else await show('overworld', sp[0], sp[1], 0, 0);
+  map.on('move', follow);
+  map.on('moveend', save);
+  window.addEventListener('hashchange', () => {      // a link pasted into the address bar
+    const g = fromHash(), c = world && center(true);
+    if (g && !(g[0] === world && g[4] === rot && c && g[1] === c[0] && g[2] === c[1] && g[3] === map.getZoom())) show(...g);
+  });
+  function showCoords(ll) {
+    const p = pick(ll);
+    if (p) coords.textContent = 'x ' + p[0] + ', y ' + p[2] + ', z ' + p[1];
+    else { const [x, z] = guess(ll, WORLDS[world].ground).map(Math.floor); coords.textContent = '≈ x ' + x + ', z ' + z; }
+  }
+  map.on('mousemove', e => { last = e.latlng; showCoords(e.latlng); });
+  if (m.live) {
+    poll(); setInterval(poll, 2000); document.addEventListener('visibilitychange', poll);
+    // during Leaflet's zoom animation it moves the markers itself; setting them then makes them jump about
+    map.on('zoomstart', () => { zooming = true; });
+    map.on('zoomend', () => { zooming = false; });
+    requestAnimationFrame(place);
+  }
+})();
+</script>
+</body>
+</html>

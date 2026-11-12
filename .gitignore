@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+# maps you draw while trying it out
+/out/
+/out-cache/
+/site/
+/site-cache/
