@@ -549,7 +549,24 @@ def read_places(path):
     return out
 
 
+def schedule(a):
+    """--every/--at as map.json's "next": {"every": hours, "first": hours after midnight UTC of the first redraw of
+    the day}, or None. --at is in this computer's own time (like cron), turned into UTC here, so a change of clocks
+    for summer time is picked up by the next draw."""
+    if a.every is None:
+        if a.at: sys.exit('--at needs --every too')
+        return None
+    if a.every not in (1, 2, 3, 4, 6, 8, 12, 24):
+        sys.exit('--every: give the hours between redraws, one that divides a day: 1, 2, 3, 4, 6, 8, 12 or 24')
+    m = re.fullmatch(r'(\d{1,2}):(\d\d)', a.at or '0:00')
+    if not m or int(m[1]) > 23 or int(m[2]) > 59: sys.exit('--at: give a time like 06:30')
+    local = datetime.datetime.now().astimezone().replace(hour=int(m[1]), minute=int(m[2]), second=0, microsecond=0)
+    utc = local.astimezone(datetime.timezone.utc)
+    return {'every': a.every, 'first': round((utc.hour + utc.minute / 60) % a.every, 4)}
+
+
 def build(a):
+    next_draw = schedule(a)
     world, out = os.path.abspath(a.world), os.path.abspath(a.out)
     regs = find_regions(world)
     if not regs['overworld']:
@@ -622,7 +639,7 @@ def build(a):
     for p in places: p['y'] = height(p['world'], p['x'], p['z'])
     info = {'id': day, 'title': a.title, 'taken': when.strftime('%Y-%m-%d %H:%M'), 'spawn': spawn,
             'spawnY': height('overworld', *spawn) if spawn else None, 'live': a.live,
-            'players': None if a.no_player_count else players_ever(world),
+            'players': None if a.no_player_count else players_ever(world), 'next': next_draw,
             'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places}
     for f in os.listdir(WEB):
         shutil.copy(os.path.join(WEB, f), os.path.join(out, f))
@@ -644,6 +661,10 @@ def main():
     ap.add_argument('--spawn', help='X,Z to mark as spawn and start at (default: the world\'s spawn point)')
     ap.add_argument('--live', help='URL of a players.json for live player dots (see the README)')
     ap.add_argument('--no-player-count', action='store_true', help='hide the "Visitors" counter (players who ever joined)')
+    ap.add_argument('--every', type=int, metavar='HOURS',
+                    help='how often you redraw the map (1, 2, 3, 4, 6, 8, 12 or 24): shows "Next update" on the page')
+    ap.add_argument('--at', metavar='HH:MM', help='with --every: the time of one of the redraws, in this computer\'s '
+                    'own time like cron (default 00:00)')
     ap.add_argument('--cache', help='where finished region pictures are kept between runs (default: OUT-cache)')
     ap.add_argument('--jobs', type=int, help='how many processes draw at once (default: CPU cores - 1)')
     build(ap.parse_args())

@@ -149,7 +149,7 @@
 </head>
 <body>
 <div id="map"></div>
-<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="online" hidden></p></div>
+<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p></div>
 <div id="side" class="panel">
   <div id="well"><div id="mini" title="Click to go there"></div></div>
   <div class="row" role="group" aria-label="World">
@@ -188,6 +188,25 @@
   const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
   document.getElementById('asof').textContent =
     d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+
+  // When the map is next redrawn (only with --every): map.json "next" is {"every": hours, "first": hours after
+  // midnight UTC of the day's first redraw}. Worked out from the clock, not asked of anything: for the first 10
+  // minutes after each redraw time it says the new map is on its way.
+  if (m.next && m.next.every > 0) {
+    const nextEl = document.getElementById('next');
+    const nextDraw = () => {
+      const now = Date.now(), H = 3600e3, slot = m.next.every * H, off = (m.next.first || 0) * H;
+      const last = Math.floor((now - off) / slot) * slot + off;
+      if (now - last < 10 * 60e3) nextEl.textContent = 'Updating now, refresh soon';
+      else {
+        const t = new Date(last + slot), mins = Math.ceil((t - now) / 60e3);
+        const left = mins >= 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + 'm';
+        nextEl.textContent = 'Next update ' + t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + ' (in ' + left + ')';
+      }
+      nextEl.hidden = false;
+    };
+    nextDraw(); setInterval(nextDraw, 30000);
+  }
 
   // Main view: 3D (see beta_map.py). View k is the world turned k quarter turns, (x, z) -> (-z, x) each, then drawn
   // from the south-east: block (x', z') at height y is a 4 px cube at screen x = 2(x' - z'), y = (x' + z') - 2y.

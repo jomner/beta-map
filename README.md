@@ -47,6 +47,8 @@ changed (the same world again: under 30 seconds).
 | `--spawn X,Z` | Where the spawn marker goes and where the map opens (default: the world's spawn point) |
 | `--live URL` | Live player dots (see below) |
 | `--no-player-count` | Hide the "Visitors" counter (bottom right: how many players have ever joined the server, counted from the world's `players` folder when the map is drawn) |
+| `--every HOURS` | If you redraw the map on a schedule (cron, Task Scheduler), how many hours apart (1, 2, 3, 4, 6, 8, 12 or 24). The page then shows "Next update 6:30 PM (in 2h 5m)" in each viewer's own time zone. It's worked out from the clock, so keep it the same as your schedule |
+| `--at HH:MM` | With `--every`: the time of one of the redraws, in your computer's own time like cron (default `00:00`). Example: cron `30 */6 * * *` is `--every 6 --at 00:30` |
 | `--cache DIR` | Where the region pictures are kept between runs (default: the output folder's name plus `-cache`) |
 | `--jobs N` | How many processes draw at once (default: your CPU cores minus one) |
 
