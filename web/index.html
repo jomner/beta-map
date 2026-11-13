@@ -184,10 +184,10 @@
     odo.setAttribute('aria-label', m.players + ' players have joined');
     document.getElementById('visits').hidden = false;
   }
-  // when the world was last saved (UTC)
+  // when the world was last saved: map.json has it in UTC, shown in the viewer's own time zone
   const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
   document.getElementById('asof').textContent =
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) + ', ' + m.taken.slice(11) + ' UTC';
+    d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
 
   // Main view: 3D (see beta_map.py). View k is the world turned k quarter turns, (x, z) -> (-z, x) each, then drawn
   // from the south-east: block (x', z') at height y is a 4 px cube at screen x = 2(x' - z'), y = (x' + z') - 2y.
