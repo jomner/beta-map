@@ -14,7 +14,7 @@
   /* Look: Pocket Edition's crafting screen, measured pixel by pixel from a 1920x1080 screenshot (2026-11-11).
      Everything is built on one "screen pixel" --u (2 px; 1 px on phones), like the game's GUI scale:
      - text: Monocraft draws one glyph pixel per 1/9 em, so font-size is 9u and every letter pixel is exactly u;
-       white text gets a u-wide shadow, secondary text is "engraved" (dark grey, light shadow)
+       white text gets a u-wide shadow, secondary text is light grey with a dark grey shadow
      - the outer frame (title, side panel, coordinates): 1u black outline, 2u bevel (light top left, dark bottom right)
      - buttons: 2u light top, 1u light left, 1u near-black right and bottom; pressed: the colours swap and the label
        drops 1u
@@ -26,7 +26,7 @@
           --btn: #978884; --btn-hover: #a69793; --btn-hi: #bab0aa; --btn-lo: #2a2829;
           --down: #726467; --down-hi: #b9aeab; --down-lo: #2b2628;
           --well: #a89995;
-          --text: #fff; --shadow: #3f3f3f; --dim: #6f6669; --dim-shadow: #c3b9b4;
+          --text: #fff; --shadow: #3f3f3f; --dim: #c3b9b4; --dim-shadow: #6f6669;
           --font: Monocraft, ui-monospace, Consolas, monospace; }
   @media (max-width: 600px) { :root { --u: 1px; } }
   * { border-radius: 0 !important; }
