@@ -136,7 +136,10 @@
   /* following a player (click their face or name): their stats, bottom left above the coordinates */
   .live b, .live span { cursor: pointer; }
   .live span { pointer-events: auto; }
-  .live.watched b { box-shadow: 0 0 0 var(--u) #fff; }
+  /* the followed player: a yellow outline slowly fading to a whiter yellow and back */
+  .live.watched b { box-shadow: 0 0 0 var(--u) #f2c94c; animation: watched 1.6s ease-in-out infinite alternate; }
+  @keyframes watched { to { box-shadow: 0 0 0 var(--u) #fff4b8; } }
+  @media (prefers-reduced-motion: reduce) { .live.watched b { animation: none; } }
   #watch { left: 14px; bottom: calc(16px + 27 * var(--u)); padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
            min-width: calc(104 * var(--u)); }
   #watch .who { display: flex; align-items: center; gap: calc(4 * var(--u)); margin-bottom: calc(3 * var(--u)); }
