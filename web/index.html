@@ -133,6 +133,37 @@
            border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
            border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
   #odo i.lead { color: #6a5f5f; text-shadow: none; }          /* the leading zeros, dimmed like an unlit wheel */
+  /* following a player (click their face or name): their stats, bottom left above the coordinates */
+  .live b, .live span { cursor: pointer; }
+  .live span { pointer-events: auto; }
+  .live.watched b { box-shadow: 0 0 0 var(--u) #fff; }
+  #watch { left: 14px; bottom: calc(16px + 27 * var(--u)); padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
+           min-width: calc(104 * var(--u)); }
+  #watch .who { display: flex; align-items: center; gap: calc(4 * var(--u)); margin-bottom: calc(3 * var(--u)); }
+  #watch .who b { flex: none; position: relative; width: calc(8 * var(--u)); height: calc(8 * var(--u));
+                  border: var(--u) solid #000; background-color: var(--c, #7cff6b); background-repeat: no-repeat;
+                  background-size: calc(64 * var(--u)) auto; background-position: calc(-8 * var(--u)) calc(-8 * var(--u));
+                  image-rendering: pixelated; }
+  #watch .who b::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
+                         background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }
+  #watch .who span { flex: 1; color: var(--c, #7cff6b); }
+  #watch .who button { flex: none; font: inherit; color: var(--text); background: var(--btn); cursor: pointer;
+                       padding: 0 calc(3 * var(--u)) var(--u); text-shadow: var(--u) var(--u) 0 var(--shadow);
+                       border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+                       border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi); }
+  #watch .who button:hover { background: var(--btn-hover); }
+  #watch dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
+  #watch dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #watch dd { margin: 0; text-align: right; }
+  #watch .gone { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  /* "N online": click for the list of who, click a name to follow them */
+  #title p#online { cursor: pointer; }
+  #title p#online:hover { text-decoration: underline; }
+  #roster { display: grid; justify-items: start; margin-top: calc(2 * var(--u)); }
+  #roster button { font: inherit; background: none; border: 0; padding: var(--u) 0; cursor: pointer;
+                   color: var(--c, #7cff6b); text-shadow: var(--u) var(--u) 0 #000; }
+  #roster button:hover { text-decoration: underline; }
+  @media (hover: none) { #watch { bottom: 16px; } }
   @media (hover: none) { #coords { display: none; } }
   @media (max-width: 600px) {
     #side { width: calc(152 * var(--u)); }
@@ -149,7 +180,7 @@
 </head>
 <body>
 <div id="map"></div>
-<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p></div>
+<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p><div id="roster" hidden></div></div>
 <div id="side" class="panel">
   <div id="well"><div id="mini" title="Click to go there"></div></div>
   <div class="row" role="group" aria-label="World">
@@ -166,6 +197,8 @@
   <div class="row"><button id="gear" aria-expanded="false">Settings</button></div>
 </div>
 <div id="coords" class="panel">x –, z –</div>
+<!-- following a player: who, where, and this session's stats from livemap.lua -->
+<div id="watch" class="panel" hidden><div class="who"><b></b><span id="w-name"></span><button id="w-close" title="Stop following (Esc)" aria-label="Stop following">x</button></div><dl id="w-stats"></dl></div>
 <!-- how many players have ever joined (counted by beta_map.py from the world's player files when it drew the map) -->
 <div id="visits" class="panel" hidden><span class="lbl">Visitors</span><span id="odo" role="img"></span></div>
 <script src="leaflet.js"></script>
@@ -391,12 +424,15 @@
       const [x, y, z] = now3(e, t), here = e.world === world;
       if (here && !zooming) e.mk.setLatLng(toLLf(x, z, y));
       if (here) e.mini.setLatLng(flatLL(x, z));
+      const el = e.shown && e.mk.getElement();
+      if (el) el.classList.toggle('watched', e.name === watching);
       if (here !== e.shown) {
         e.shown = here;
         if (here) { e.mk.addTo(liveMarks); e.mini.addTo(miniDots); styleOf(e.name, e.mk.getElement()); styleOf(e.name, e.mini.getElement()); }
         else { liveMarks.removeLayer(e.mk); miniDots.removeLayer(e.mini); }
       }
     }
+    if (watching) keepOn(t);
     requestAnimationFrame(place);
   }
   function drawLive() {                                 // after a world change or turn: dots of the new view at once
@@ -417,14 +453,19 @@
           mini: L.marker([0, 0], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'minidot', iconSize: [6, 6] }) }) };
         e.mk.on('add', () => { e.mk.getElement().querySelector('span').textContent = p.name; styleOf(p.name, e.mk.getElement()); });
         e.mini.on('add', () => styleOf(p.name, e.mini.getElement()));
+        e.mk.on('click', () => watch(p.name));
+        e.p = p;
         continue;
       }
       const cur = now3(e, t), far = Math.hypot(pos[0] - cur[0], pos[2] - cur[2]) > 64;
       if (p.world !== e.world || far) { e.from = pos; e.world = p.world; e.shown = null; }   // portal or teleport: jump
       else e.from = cur;
+      if (p.name === watching && p.world !== world) show(p.world, p.x, p.z, map.getZoom(), rot);   // take the view along
+      e.p = p;
       e.to = pos; e.t0 = t;
     }
     for (const n of Object.keys(live)) if (!seen.has(n)) {
+      if (n === watching) unwatch(true);
       liveMarks.removeLayer(live[n].mk); miniDots.removeLayer(live[n].mini); delete live[n];
     }
   }
@@ -451,7 +492,96 @@
       el.hidden = true;
     }
     update(players);
+    drawRoster(players);
+    statsBox();
   }
+
+  // ---- following a player: click their face or name (or a name in the "N online" list) and the view glides to them
+  // and stays on them; turning and zooming keep them in the middle, and a portal takes the view along. Dragging the
+  // map, clicking the minimap or a world button, the x or Esc stops it. The box shows this session's stats, which
+  // livemap.lua counts (an older livemap.lua without them: just the world and position).
+  let watching = null, watchFrom = null, watchT0 = 0, goneTimer = 0;
+  const watchBox = document.getElementById('watch'), ZOOMS = ['scrollWheelZoom', 'doubleClickZoom', 'touchZoom'];
+  function watch(name) {
+    const e = live[name];
+    if (!e) return;
+    clearTimeout(goneTimer);
+    watching = name; watchFrom = map.getCenter(); watchT0 = performance.now();
+    for (const o of ZOOMS) map.options[o] = 'center';             // zoom around them, not around the mouse
+    document.getElementById('w-name').textContent = name;
+    styleOf(name, watchBox.querySelector('.who'));
+    watchBox.hidden = false;
+    document.getElementById('roster').hidden = true;
+    if (e.world !== world) { const [x, , z] = now3(e, performance.now()); show(e.world, x, z, map.getZoom(), rot); }
+    statsBox();
+  }
+  function unwatch(left) {
+    if (!watching) return;
+    const name = watching;
+    watching = null;
+    for (const o of ZOOMS) map.options[o] = true;
+    if (left) {                                          // say so for a moment instead of just vanishing
+      const s = document.getElementById('w-stats'); s.replaceChildren();
+      const g = document.createElement('dd'); g.className = 'gone'; g.textContent = name + ' left the game'; s.append(g);
+      goneTimer = setTimeout(() => { if (!watching) watchBox.hidden = true; }, 5000);
+    } else watchBox.hidden = true;
+    save();
+  }
+  function ago(sec) {
+    const mins = Math.floor(sec / 60);
+    return mins < 1 ? 'just now' : mins < 60 ? mins + 'm' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+  }
+  function statsBox() {
+    const e = watching && live[watching];
+    if (!e || !e.p) return;
+    const p = e.p, rows = [['World', p.world === 'nether' ? 'Nether' : 'Overworld'],
+      ['Position', Math.floor(p.x) + ', ' + Math.floor(p.y) + ', ' + Math.floor(p.z)]];
+    if (isFinite(p.joined)) rows.push(['Online for', ago(Date.now() / 1000 - p.joined)]);
+    if (isFinite(p.walked)) rows.push(['Walked', p.walked.toLocaleString() + ' blocks']);
+    if (isFinite(p.mined)) rows.push(['Mined', p.mined.toLocaleString()]);
+    if (isFinite(p.placed)) rows.push(['Placed', p.placed.toLocaleString()]);
+    document.getElementById('w-stats').replaceChildren(...rows.flatMap(([k, v]) => {
+      const dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = k; dd.textContent = v; return [dt, dd];
+    }));
+  }
+  function keepOn(t) {                                   // every frame while following: center on them
+    const e = live[watching];
+    if (!e || e.world !== world || zooming) return;
+    const [x, y, z] = now3(e, t);
+    let ll = toLLf(x, z, y);
+    const k = Math.min(1, (t - watchT0) / 500);
+    if (k < 1) { const s = k * (2 - k); ll = L.latLng(watchFrom.lat + (ll.lat - watchFrom.lat) * s, watchFrom.lng + (ll.lng - watchFrom.lng) * s); }
+    const c = map.getCenter();
+    if (Math.abs(c.lat - ll.lat) + Math.abs(c.lng - ll.lng) > 0.01) map.setView(ll, map.getZoom(), { animate: false });
+  }
+  // the "N online" list
+  function drawRoster(players) {
+    const r = document.getElementById('roster');
+    if (r.hidden) return;
+    // rebuilt only when someone joins or leaves: a button swapped mid-click would lose the click
+    const key = players.map(p => p.name).join('\n');
+    if (r.dataset.key === key && r.children.length) return;
+    r.dataset.key = key;
+    r.replaceChildren(...players.map(p => {
+      const b = document.createElement('button');
+      b.textContent = p.name; b.title = 'Follow ' + p.name;
+      const pr = profiles[p.name] || {};
+      if (/^#[0-9a-f]{6}$/i.test(pr.colour || '')) b.style.setProperty('--c', pr.colour);
+      b.onclick = () => watch(p.name);
+      return b;
+    }));
+    if (!players.length) r.hidden = true;
+  }
+  document.getElementById('online').onclick = () => {
+    const r = document.getElementById('roster');
+    r.hidden = !r.hidden;
+    drawRoster(Object.values(live).map(e => e.p).filter(Boolean));
+  };
+  document.getElementById('online').title = 'Click to see who, then click a name to follow them';
+  document.getElementById('w-close').onclick = () => unwatch();
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') unwatch(); });
+  setInterval(statsBox, 15000);                          // "Online for" between polls
 
   // the block at the middle of the screen: exact once the heights along the way are in; until then where show() put
   // the view (if it hasn't moved since), else a guess at the usual ground height
@@ -478,6 +608,7 @@
   }
   // the minimap: glide there (same view, so just a pan)
   mini.on('click', async e => {
+    unwatch();
     const x = Math.floor(e.latlng.lng), z = Math.floor(-e.latlng.lat);
     const y = await heightNow(x, z);
     target = [x, z]; targetLL = toLL(x, z, y);
@@ -501,6 +632,7 @@
   document.querySelectorAll('[data-world]').forEach(btn => btn.onclick = () => {
     const to = btn.dataset.world;
     if (to === world) return;
+    unwatch();
     let [x, z] = center();
     if (to === 'nether') { x = Math.floor(x / 8); z = Math.floor(z / 8); } else { x *= 8; z *= 8; }
     show(to, x, z, map.getZoom(), rot);
@@ -512,7 +644,8 @@
   const h = fromHash(), sp = m.spawn || [0, 0];
   if (h) await show(...h); else await show('overworld', sp[0], sp[1], 0, 0);
   map.on('move', follow);
-  map.on('moveend', save);
+  map.on('moveend', () => { if (!watching) save(); });
+  map.on('dragstart', () => unwatch());
   window.addEventListener('hashchange', () => {      // a link pasted into the address bar
     const g = fromHash(), c = world && center(true);
     if (g && !(g[0] === world && g[4] === rot && c && g[1] === c[0] && g[2] === c[1] && g[3] === map.getZoom())) show(...g);

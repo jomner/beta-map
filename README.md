@@ -8,7 +8,8 @@ directions, and cut into tiles.
 - **Just Python.** One script, no packages to install (Python 3.8 or newer).
 - **A plain static website.** The output is a folder of files. Host it anywhere, including GitHub Pages for free.
 - **Read-only.** It only reads the world and never changes it.
-- **Optional live player dots** if your server writes a small `players.json` (see below).
+- **Optional live player dots** if your server writes a small `players.json` (see below). Click a player (or a
+  name in the "online" list) and the view follows them, with their stats in a box.
 
 ## What worlds it reads
 
@@ -72,7 +73,8 @@ file every 2 seconds:
 ```
 
 `time` is in Unix seconds; when it's over 30 seconds old the page says the server is offline. `world` is
-`overworld` or `nether`. Something on your server has to write that file and serve it over HTTPS with an
+`overworld` or `nether`. Each player can also have `joined` (Unix seconds), `mined`, `placed` and `walked`
+(blocks): this session's stats, shown while you follow them. Something on your server has to write that file and serve it over HTTPS with an
 `Access-Control-Allow-Origin: *` header. Then pass its URL with `--live https://example.com/players.json`.
 
 - **Betrock++:** `extras/livemap.lua` writes it (needs the bpa_lua addon; instructions are at the top of the file).
