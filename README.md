@@ -49,7 +49,7 @@ fast drawer:
 own from then on (same command, same website, the same pixels):
 
 ```
-cc -O2 -o beta-map-draw beta-map-draw.c -lz -lm
+cc -std=c99 -O2 -o beta-map-draw beta-map-draw.c -lz -lm
 ```
 
 It needs a C compiler and zlib, which most Linux systems have (Debian, Ubuntu, Raspberry Pi OS:
@@ -66,7 +66,8 @@ drawing.
 - **For very slow machines:** `--views 1` draws the world from one direction instead of four (a quarter of the
   work and of the disk space); the page then has no turn buttons.
 
-It never changes the world, and a run that fails leaves the website as it was.
+It never changes the world. New tiles are only moved into the site once a run has drawn everything, so a run
+that fails or is stopped leaves the website as it was.
 
 ### Options
 
@@ -154,7 +155,24 @@ Optionally, a `profiles.json` next to `players.json` gives players a skin face a
   show, and draws the 2048 px wide picture of a region in 512 px strips that line up with the tiles: every pixel
   column comes from just one diagonal of blocks. Each region's drawing is kept cut into tile pieces in the cache, so
   a tile is rebuilt from its pieces when one of the regions under it changes. The tiles stay in `site/tiles/c`
-  between runs; each address ends in `?v=` and the draw's id, so browsers never show an old one.
+  between runs; each address ends in `?v=` and the draw's id, so browsers never show an old one (the price: after
+  a redraw, a returning visitor loads the tiles again).
+- **Failing safely:** the fast drawer stages new and removed tiles in `tiles/c/.next` and moves them into place only
+  once everything is drawn. Its record in the cache and a mark in the site (`tiles/c/.drawn`) carry the same run id,
+  so if the tiles were deleted, or drawn in Python in between, it draws everything again instead of trusting them.
+
+## Tests
+
+For the fast drawer, on Linux or macOS with a C compiler (use a copy of a world: the test adds two region files to
+it and takes them out again):
+
+```
+bash tests/drawer-test.sh path/to/world-copy
+```
+
+It checks that the drawer's site is pixel for pixel the Python one, also when built with fused multiply-add allowed,
+and after a Python run in between, a deleted site, a run that fails halfway and a change of `--views`.
+`tests/fuzz.py` feeds a drawer built with the sanitizers damaged region files (instructions at its top).
 
 ## Credits and licences
 

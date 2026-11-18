@@ -1,8 +1,10 @@
 /* beta-map-draw: the fast drawer for beta-map (MIT licence). It draws exactly what beta_map.py draws, the same
  * pixels, but in C, in little memory, and only what changed since the last run.
  *
- *   Build:  cc -O2 -o beta-map-draw beta-map-draw.c -lz -lm
- *   (beta_map.py finds it next to itself and uses it; it isn't meant to be run by hand.)
+ *   Build:  cc -std=c99 -O2 -o beta-map-draw beta-map-draw.c -lz -lm
+ *   (beta_map.py finds it next to itself and uses it; it isn't meant to be run by hand.) -std=c99 for older
+ *   compilers (GCC 4 defaults to C89), and because in ISO C mode GCC doesn't fuse a multiply and an add into one
+ *   rounding: fused, some see-through pixels come out 1 off from beta_map.py's. The pragmas below say the same.
  *
  *   beta-map-draw WORLD CACHE STORE [--png-level 0..9] [--views 1..4]
  *
@@ -12,6 +14,11 @@
  * did), then rebuilds only the tiles those regions touch, and the zoomed-out tiles over them. At the end it writes
  * CACHE/summary.json: each layer's extent and the torch tiles, for map.json.
  *
+ * Safe to stop or fail at any point: new and removed tiles are staged in STORE/.next and only moved into place once
+ * everything is drawn, so the website keeps showing the last good map until then. The record in CACHE and a mark
+ * in STORE (.drawn) carry the same run id; when they don't match (the tiles were deleted, or beta_map.py drew in
+ * Python, which removes them) everything is drawn again.
+ *
  * Memory: a region file, the top-down data of its 512 x 512 columns, the blocks each column shows (from a little
  * under the ground to its top), and a 512 x 1280 strip of the picture at a time: the isometric picture of a region is
  * 2048 px wide, and every pixel column of it comes only from the blocks on one diagonal (x - z), so it's drawn in
@@ -19,6 +26,12 @@
  *
  * Big-endian safe (the region files are big-endian anyway): it runs on PowerPC, like a Wii. */
 #define _FILE_OFFSET_BITS 64
+#define _POSIX_C_SOURCE 200809L     /* (with -std=c99: stat's st_mtim, dirent) */
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +40,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <zlib.h>
 #ifdef _WIN32
 #include <direct.h>
@@ -35,7 +49,8 @@
 #define MKDIR(p) mkdir(p, 0755)
 #endif
 
-#define DRAW_VERSION "c2"   /* bump when the drawing changes: everything is redrawn */
+#define DRAW_VERSION "c3"   /* bump when the drawing or the cache changes: everything is redrawn */
+#define MAX_REGION 100000   /* region coordinates beyond this (the world border is at 58,594) are ignored */
 #define T 512
 #define IW 2048
 #define IH 1280
@@ -87,7 +102,9 @@ static void mkdirs(const char *path) {
 static unsigned char *read_file(const char *path, size_t *len) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
-    size_t cap = 1 << 20, n = 0; unsigned char *b = xmalloc(cap);
+    struct stat st;                                   /* sized to the file: no doubling while reading */
+    size_t cap = stat(path, &st) == 0 && st.st_size > 0 ? (size_t)st.st_size + 1 : 1 << 20, n = 0;
+    unsigned char *b = xmalloc(cap);
     for (;;) {
         if (n == cap) b = xrealloc(b, cap *= 2);
         size_t r = fread(b + n, 1, cap - n, f);
@@ -97,6 +114,12 @@ static unsigned char *read_file(const char *path, size_t *len) {
     fclose(f); *len = n; return b;
 }
 
+static int move_over(const char *from, const char *to) {
+#ifdef _WIN32
+    remove(to);                                     /* (rename doesn't replace there) */
+#endif
+    return rename(from, to);
+}
 static int write_file(const char *path, const void *a, size_t an, const void *b, size_t bn) {
     char tmp[4200]; snprintf(tmp, sizeof tmp, "%s.tmp", path);
     FILE *f = fopen(tmp, "wb");
@@ -104,10 +127,7 @@ static int write_file(const char *path, const void *a, size_t an, const void *b,
     int ok = fwrite(a, 1, an, f) == an && (!bn || fwrite(b, 1, bn, f) == bn);
     ok = fclose(f) == 0 && ok;
     if (!ok) { remove(tmp); return -1; }
-#ifdef _WIN32
-    remove(path);                                   /* (rename doesn't replace there) */
-#endif
-    return rename(tmp, path);
+    return move_over(tmp, path);
 }
 
 /* ------------------------------------------------------------------ PNG: 8-bit RGB or RGBA, filter 0 */
@@ -296,12 +316,15 @@ static int chunk(Reader *r, int i, const unsigned char **blocks, const unsigned 
     if (cn > r->len - off - 5) cn = r->len - off - 5;
     const unsigned char *in = r->file + off + 5;
     z_stream *z;
-    if (r->file[off + 4] == 2 && cn > 2 && (in[0] & 15) == 8 && !(in[1] & 32) && (in[0] * 256 + in[1]) % 31 == 0) {
+    if (r->file[off + 4] == 2) {                     /* zlib, as beta_map.py: a bad header is a broken chunk */
+        if (cn <= 2 || (in[0] & 15) != 8 || (in[1] & 32) || (in[0] * 256 + in[1]) % 31) return -1;
         if (!r->raw_ok) { memset(&r->zraw, 0, sizeof r->zraw); if (inflateInit2(&r->zraw, -15) != Z_OK) return -1; r->raw_ok = 1; }
         else inflateReset(&r->zraw);
         z = &r->zraw; in += 2; cn -= 2;
-    } else {
-        if (!r->any_ok) { memset(&r->zany, 0, sizeof r->zany); if (inflateInit2(&r->zany, 15 + 32) != Z_OK) return -1; r->any_ok = 1; }
+        /* (the checksum at the end isn't checked: a chunk whose data unpacks but whose checksum is wrong is drawn,
+         * where beta_map.py leaves it blank; that takes damage inside the last 4 bytes, and saves a tenth of the run) */
+    } else {                                          /* anything else is gzip, as beta_map.py */
+        if (!r->any_ok) { memset(&r->zany, 0, sizeof r->zany); if (inflateInit2(&r->zany, 15 + 16) != Z_OK) return -1; r->any_ok = 1; }
         else inflateReset(&r->zany);
         z = &r->zany;
     }
@@ -625,9 +648,14 @@ static int load_piece(const char *path, int tx, int ty, Piece *out, unsigned cha
         for (uint32_t i = 0; i < n && n < 100000; i++) {
             if (fread(e, 1, 28, f) != 28) break;
             if ((int32_t)be32(e) == tx && (int32_t)be32(e + 4) == ty) {
-                out->tx = tx; out->ty = ty; out->x0 = be32(e + 8); out->y0 = be32(e + 12);
+                uint32_t x0 = be32(e + 8), y0 = be32(e + 12);
+                out->tx = tx; out->ty = ty;
                 out->w = be32(e + 16) >> 16; out->h = be32(e + 16) & 0xffff; out->off = be32(e + 20); out->len = be32(e + 24);
-                if (out->w > T || out->h > T || out->x0 + out->w > T || out->y0 + out->h > T) break;
+                /* (our own file, but never trusted: it has to fit the tile, and its data its size) */
+                if (x0 > T || y0 > T || out->w < 1 || out->h < 1 || out->w > T || out->h > T) break;
+                out->x0 = (int)x0; out->y0 = (int)y0;
+                if (out->x0 + out->w > T || out->y0 + out->h > T) break;
+                if (out->len > compressBound(5 * (uLong)out->w * out->h) + 64) break;
                 unsigned char *z = xmalloc(out->len);
                 if (!fseek(f, 8 + 28 * (long)n + (long)out->off, SEEK_SET) && fread(z, 1, out->len, f) == out->len) {
                     uLongf rn = 5 * (uLongf)out->w * out->h;
@@ -641,7 +669,33 @@ static int load_piece(const char *path, int tx, int ty, Piece *out, unsigned cha
 }
 
 /* ------------------------------------------------------------------ the world's regions and what was drawn last time */
-typedef struct { int w, rx, rz; long long size, mtime; uint64_t hash; int dirty, gone; char path[1024]; } Region;
+/* what a run does with a region */
+enum { KEEP,                /* drawn before, the same file: nothing to do */
+       DRAW,                /* new, or changed: draw it */
+       SAME_FILE,           /* (while reading the record: same size and time as last time) */
+       CHECK };             /* (same: size or time differ; drawn again only if its contents do) */
+typedef struct { int w, rx, rz; long long size, mtime; uint64_t hash; int dirty, gone; char path[1400]; } Region;
+
+/* "r.<x>.<z>.mcr", the numbers written plainly (no "+", no leading zeros, no "-0") and inside MAX_REGION: the
+ * same names beta_map.py takes. 0 if it is one. */
+static int region_name(const char *s, int *rx, int *rz) {
+    if (strncmp(s, "r.", 2)) return -1;
+    s += 2;
+    for (int i = 0; i < 2; i++) {
+        int neg = *s == '-'; s += neg;
+        if (*s < '0' || *s > '9' || (s[0] == '0' && s[1] >= '0' && s[1] <= '9') || (neg && s[0] == '0')) return -1;
+        long v = 0;
+        while (*s >= '0' && *s <= '9') { v = v * 10 + (*s++ - '0'); if (v > MAX_REGION) return -1; }
+        if (*s++ != '.') return -1;
+        *(i ? rz : rx) = (int)(neg ? -v : v);
+    }
+    return strcmp(s, "mcr") ? -1 : 0;
+}
+/* where a region's picture goes in view k: its top-left pixel (X0, Y0); the region turned for that view */
+static void region_origin(int rx, int rz, int k, int *trx, int *trz, int *X0, int *Y0) {
+    turn_region(&rx, &rz, k);
+    *trx = rx; *trz = rz; *X0 = (rx - rz) * 1024 - 1022; *Y0 = (rx + rz) * 512 - 254;
+}
 static Region *R; static int NR, CAPR;
 static const char *WNAME[2] = {"overworld", "nether"};
 static const char *ISO[2] = {"iso", "nether-iso"}, *FLAT[2] = {"flat", "nether"}, *HEIGHT[2] = {"height", "nether-height"};
@@ -653,9 +707,9 @@ static void find_regions(const char *world) {
         if (!d) continue;
         struct dirent *e;
         while ((e = readdir(d))) {
-            int rx, rz; char tail[8];
-            if (sscanf(e->d_name, "r.%d.%d.%7s", &rx, &rz, tail) != 3 || strcmp(tail, "mcr")) continue;
-            char p[1100]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name);
+            int rx, rz;
+            if (region_name(e->d_name, &rx, &rz)) continue;
+            char p[1400]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name);
             struct stat st;
             if (stat(p, &st) || st.st_size <= 8192) continue;   /* beta_map.py: too small to have a chunk */
             if (NR == CAPR) { CAPR = CAPR ? CAPR * 2 : 64; R = xrealloc(R, CAPR * sizeof(Region)); }
@@ -694,14 +748,39 @@ static void ts_unique(TileSet *s) {
     s->n = m;
 }
 
-static char STORE[1024], CACHE[1024];
-static void tile_path(char *out, size_t n, const char *layer, int z, int x, int y) { snprintf(out, n, "%s/%s/%d/%d_%d.png", STORE, layer, z, x, y); }
+static char STORE[1024], CACHE[1024], STAGE[1100];
 static void pieces_path(char *out, size_t n, const Region *g, int k) { snprintf(out, n, "%s/p-%d-%d-%d_%d.bin", CACHE, g->w, k, g->rx, g->rz); }
+
+/* Tiles: written and removed in STAGE (a removal is an empty file there), read from STAGE first; commit() moves
+ * them into STORE at the end of a run that got that far. */
+static void tile_path(char *out, size_t n, const char *base, const char *layer, int z, int x, int y) {
+    snprintf(out, n, "%s/%s/%d/%d_%d.png", base, layer, z, x, y);
+}
+static void staged_dir(const char *layer, int z) { char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STAGE, layer, z); mkdirs(d); }
+static void tile_write(const char *layer, int z, int x, int y, const unsigned char *px, int alpha) {
+    char p[1200]; staged_dir(layer, z); tile_path(p, sizeof p, STAGE, layer, z, x, y);
+    if (png_write(p, T, T, px, alpha)) { fprintf(stderr, "can't write %s\n", p); exit(1); }
+}
+static void tile_remove(const char *layer, int z, int x, int y) {
+    char p[1200]; tile_path(p, sizeof p, STORE, layer, z, x, y);
+    FILE *f = fopen(p, "rb");
+    if (f) fclose(f);                                 /* only if it's there now (or staged: then it's replaced) */
+    tile_path(p, sizeof p, STAGE, layer, z, x, y);
+    if (!f) { remove(p); return; }
+    staged_dir(layer, z);
+    if (write_file(p, "", 0, NULL, 0)) { fprintf(stderr, "can't write %s\n", p); exit(1); }
+}
+static int tile_read_rgb(const char *layer, int z, int x, int y, unsigned char *px) {
+    char p[1200]; struct stat st;
+    tile_path(p, sizeof p, STAGE, layer, z, x, y);
+    if (stat(p, &st) == 0) return st.st_size ? png_read_rgb(p, px, T, T) : -1;   /* staged, or staged as removed */
+    tile_path(p, sizeof p, STORE, layer, z, x, y);
+    return png_read_rgb(p, px, T, T);
+}
 
 /* the tiles a region's picture covers in view k */
 static void iso_tiles(const Region *g, int k, TileSet *s) {
-    int rx = g->rx, rz = g->rz; turn_region(&rx, &rz, k);
-    int X0 = (rx - rz) * 1024 - 1022, Y0 = (rx + rz) * 512 - 254;
+    int rx, rz, X0, Y0; region_origin(g->rx, g->rz, k, &rx, &rz, &X0, &Y0);
     for (int ty = floordiv(Y0, T); ty <= floordiv(Y0 + IH - 1, T); ty++)
         for (int tx = floordiv(X0, T); tx <= floordiv(X0 + IW - 1, T); tx++) ts_add(s, tx, ty);
 }
@@ -717,8 +796,7 @@ static void compose_tile(int w, int k, int tx, int ty, unsigned char *buf, unsig
     for (int i = 0; i < NR; i++) {
         const Region *g = &R[i];
         if (g->w != w || g->gone) continue;
-        int rx = g->rx, rz = g->rz; turn_region(&rx, &rz, k);
-        int X0 = (rx - rz) * 1024 - 1022, Y0 = (rx + rz) * 512 - 254;
+        int rx, rz, X0, Y0; region_origin(g->rx, g->rz, k, &rx, &rz, &X0, &Y0);
         if (X0 + IW <= tx * T || X0 >= (tx + 1) * T || Y0 + IH <= ty * T || Y0 >= (ty + 1) * T) continue;
         ord[n].i = i; ord[n].key0 = rx + rz; ord[n].key1 = rx; n++;
     }
@@ -747,25 +825,22 @@ static void compose_tile(int w, int k, int tx, int ty, unsigned char *buf, unsig
         }
     }
     free(ord);
-    char path[1200], layer[64];
+    char layer[64];
     snprintf(layer, sizeof layer, "%s%d", ISO[w], k);
-    tile_path(path, sizeof path, layer, 0, tx, ty);
-    if (drawn) png_write(path, T, T, buf, 0); else remove(path);
+    if (drawn) tile_write(layer, 0, tx, ty, buf, 0); else tile_remove(layer, 0, tx, ty);
     snprintf(layer, sizeof layer, "%s%d-torches", ISO[w], k);
-    tile_path(path, sizeof path, layer, 0, tx, ty);
     int any = 0;
     static const unsigned char TORCH[4][4] = {{0, 0, 0, 0}, {255, 214, 80, 255}, {200, 40, 30, 255}, {100, 75, 45, 255}};
     for (int i = 0; i < T * T; i++) {
         int v = tb[i] < 4 ? tb[i] : 0;
         memcpy(rgba + 4 * i, TORCH[v], 4); if (v) any = 1;
     }
-    if (any) png_write(path, T, T, rgba, 1); else remove(path);
+    if (any) tile_write(layer, 0, tx, ty, rgba, 1); else tile_remove(layer, 0, tx, ty);
 }
 
 static void zoom_out(const char *layer, TileSet *dirty, unsigned char *child, unsigned char *out) {
     TileSet cur = *dirty, next = {0};
     for (int z = -1; z >= MINZ; z--) {
-        char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STORE, layer, z); mkdirs(d);
         next.n = 0;
         for (int i = 0; i < cur.n; i++) ts_add(&next, floordiv(cur.xy[2 * i], 2), floordiv(cur.xy[2 * i + 1], 2));
         ts_unique(&next);
@@ -773,8 +848,7 @@ static void zoom_out(const char *layer, TileSet *dirty, unsigned char *child, un
             int px = next.xy[2 * i], pz = next.xy[2 * i + 1], have = 0;
             for (int j = 0; j < T * T; j++) memcpy(out + 3 * j, BG, 3);
             for (int qx = 0; qx < 2; qx++) for (int qz = 0; qz < 2; qz++) {
-                char p[1200]; tile_path(p, sizeof p, layer, z + 1, px * 2 + qx, pz * 2 + qz);
-                if (png_read_rgb(p, child, T, T)) continue;
+                if (tile_read_rgb(layer, z + 1, px * 2 + qx, pz * 2 + qz, child)) continue;
                 have = 1;
                 for (int y = 0; y < T / 2; y++) {
                     const unsigned char *r1 = child + (size_t)(2 * y) * T * 3, *r2 = r1 + T * 3;
@@ -783,8 +857,7 @@ static void zoom_out(const char *layer, TileSet *dirty, unsigned char *child, un
                         for (int c = 0; c < 3; c++) o[3 * x + c] = (r1[6 * x + c] + r1[6 * x + 3 + c] + r2[6 * x + c] + r2[6 * x + 3 + c]) >> 2;
                 }
             }
-            char p[1200]; tile_path(p, sizeof p, layer, z, px, pz);
-            if (have) png_write(p, T, T, out, 0); else remove(p);
+            if (have) tile_write(layer, z, px, pz, out, 0); else tile_remove(layer, z, px, pz);
         }
         if (cur.xy != dirty->xy) free(cur.xy);
         cur = next; next = (TileSet){0};
@@ -848,24 +921,77 @@ static void summary(void) {
 }
 
 /* ------------------------------------------------------------------ the run */
-static void remove_pngs(const char *layer) {
-    for (int z = 0; z >= MINZ; z--) {
-        char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STORE, layer, z);
-        DIR *dd = opendir(d); struct dirent *e;
-        if (!dd) continue;
-        while ((e = readdir(dd))) if (strstr(e->d_name, ".png")) { char p[1500]; snprintf(p, sizeof p, "%s/%s", d, e->d_name); remove(p); }
-        closedir(dd);
-    }
-}
-static void remove_layer_dirs(void) {                 /* a new drawing version (or no record): start the store over */
+/* every layer's every zoom folder: fn(layer, z) */
+static void each_layer(void (*fn)(const char *, int)) {
     for (int w = 0; w < 2; w++) {
-        remove_pngs(FLAT[w]); remove_pngs(HEIGHT[w]);
+        const char *names[2] = {FLAT[w], HEIGHT[w]};
+        for (int j = 0; j < 2; j++) for (int z = 0; z >= MINZ; z--) fn(names[j], z);
         for (int k = 0; k < 4; k++) {
             char layer[64];
-            snprintf(layer, sizeof layer, "%s%d", ISO[w], k); remove_pngs(layer);
-            snprintf(layer, sizeof layer, "%s%d-torches", ISO[w], k); remove_pngs(layer);
+            snprintf(layer, sizeof layer, "%s%d", ISO[w], k);
+            for (int z = 0; z >= MINZ; z--) fn(layer, z);
+            snprintf(layer, sizeof layer, "%s%d-torches", ISO[w], k);
+            for (int z = 0; z >= MINZ; z--) fn(layer, z);
         }
     }
+}
+/* the tile file names (x_y.png) in a folder: fn(folder, name) for each */
+static void each_png(const char *dir, void (*fn)(const char *, const char *, const char *, int), const char *layer, int z) {
+    DIR *dd = opendir(dir); struct dirent *e;
+    if (!dd) return;
+    while ((e = readdir(dd))) {
+        size_t n = strlen(e->d_name);
+        if (n > 4 && !strcmp(e->d_name + n - 4, ".png")) fn(dir, e->d_name, layer, z);
+    }
+    closedir(dd);
+}
+static void drop_staged(const char *dir, const char *name, const char *layer, int z) {
+    (void)layer; (void)z; char p[1500]; snprintf(p, sizeof p, "%s/%s", dir, name); remove(p);
+}
+static void clear_stage_dir(const char *layer, int z) {   /* what a run that stopped early left staged */
+    char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STAGE, layer, z); each_png(d, drop_staged, layer, z);
+}
+static void unstage_tile(const char *dir, const char *name, const char *layer, int z) {
+    char from[1500], to[1500], d[1200]; struct stat st;
+    snprintf(from, sizeof from, "%s/%s", dir, name);
+    snprintf(d, sizeof d, "%s/%s/%d", STORE, layer, z); snprintf(to, sizeof to, "%s/%s", d, name);
+    if (stat(from, &st)) return;
+    if (!st.st_size) { remove(to); remove(from); return; }   /* staged as removed */
+    mkdirs(d);
+    if (move_over(from, to)) { fprintf(stderr, "can't move %s into place\n", from); exit(1); }
+}
+static void commit_dir(const char *layer, int z) {
+    char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STAGE, layer, z); each_png(d, unstage_tile, layer, z);
+}
+static void remove_live(const char *dir, const char *name, const char *layer, int z) {
+    int x, y;
+    (void)dir; if (sscanf(name, "%d_%d.png", &x, &y) == 2) tile_remove(layer, z, x, y);
+}
+static void stage_remove_dir(const char *layer, int z) {
+    char d[1200]; snprintf(d, sizeof d, "%s/%s/%d", STORE, layer, z); each_png(d, remove_live, layer, z);
+}
+/* starting over (a new drawing version, other views, or a record that doesn't match the tiles): every tile there
+ * now is staged as removed (the ones drawn again replace that), and the old pieces go */
+static void start_over(void) {
+    each_layer(stage_remove_dir);
+    DIR *dd = opendir(CACHE); struct dirent *e;
+    if (!dd) return;
+    while ((e = readdir(dd))) {
+        size_t n = strlen(e->d_name);
+        if (!strncmp(e->d_name, "p-", 2) && n > 4 && !strcmp(e->d_name + n - 4, ".bin")) {
+            char p[1500]; snprintf(p, sizeof p, "%s/%s", CACHE, e->d_name); remove(p);
+        }
+    }
+    closedir(dd);
+}
+
+/* the first line of a file, or "" */
+static void first_line(const char *path, char *out, size_t n) {
+    FILE *f = fopen(path, "r");
+    out[0] = 0;
+    if (!f) return;
+    if (!fgets(out, (int)n, f)) out[0] = 0;
+    fclose(f);
 }
 
 int main(int argc, char **argv) {
@@ -878,23 +1004,30 @@ int main(int argc, char **argv) {
     if (png_level < 0 || png_level > 9) png_level = 1;
     tables();
     snprintf(CACHE, sizeof CACHE, "%s", argv[2]); snprintf(STORE, sizeof STORE, "%s", argv[3]);
+    snprintf(STAGE, sizeof STAGE, "%s/.next", STORE);
     mkdirs(CACHE); mkdirs(STORE);
+    each_layer(clear_stage_dir);
     find_regions(argv[1]);
 
-    /* what was drawn last time */
-    char statep[1200]; snprintf(statep, sizeof statep, "%s/state.txt", CACHE);
-    FILE *sf = fopen(statep, "r"); int same_version = 0;
+    /* what was drawn last time: the record's first line names the version, the views and the run, and the tiles'
+     * mark has to say the same, or the tiles aren't the ones the record describes */
+    char statep[1200], markp[1200], head[256], mark[256], want[64];
+    snprintf(statep, sizeof statep, "%s/state.txt", CACHE); snprintf(markp, sizeof markp, "%s/.drawn", STORE);
+    first_line(statep, head, sizeof head); first_line(markp, mark, sizeof mark);
+    snprintf(want, sizeof want, "beta-map-draw " DRAW_VERSION " views %d run ", NV);
+    int same_version = head[0] && !strncmp(head, want, strlen(want)) && !strcmp(head, mark);
+    FILE *sf = same_version ? fopen(statep, "r") : NULL;
     if (sf) {
         char line[512];
-        char want[64]; snprintf(want, sizeof want, "beta-map-draw " DRAW_VERSION " views %d\n", NV);   /* other views: start over */
-        if (fgets(line, sizeof line, sf) && !strcmp(line, want)) same_version = 1;
-        while (same_version && fgets(line, sizeof line, sf)) {
+        if (!fgets(line, sizeof line, sf)) line[0] = 0;   /* (the first line, read above) */
+        while (fgets(line, sizeof line, sf)) {
             int w, rx, rz; long long size, mtime; unsigned long long hash;
             if (sscanf(line, "%d %d %d %lld %lld %llx", &w, &rx, &rz, &size, &mtime, &hash) != 6) continue;
+            if (w < 0 || w > 1 || rx < -MAX_REGION || rx > MAX_REGION || rz < -MAX_REGION || rz > MAX_REGION) continue;
             int found = 0;
             for (int i = 0; i < NR; i++) if (R[i].w == w && R[i].rx == rx && R[i].rz == rz && !R[i].gone) {
                 found = 1; R[i].hash = hash;
-                R[i].dirty = R[i].size == size && R[i].mtime == mtime ? 3 : 4;   /* 3: same file; 4: changed? check */
+                R[i].dirty = R[i].size == size && R[i].mtime == mtime ? SAME_FILE : CHECK;
             }
             if (!found) {                               /* gone since: its tiles change */
                 if (NR == CAPR) { CAPR = CAPR ? CAPR * 2 : 64; R = xrealloc(R, CAPR * sizeof(Region)); }
@@ -903,16 +1036,16 @@ int main(int argc, char **argv) {
         }
         fclose(sf);
     }
-    if (!same_version) { remove_layer_dirs(); for (int i = 0; i < NR; i++) R[i].dirty = 1; }
+    if (!same_version) { start_over(); for (int i = 0; i < NR; i++) R[i].dirty = DRAW; }
     for (int i = 0; i < NR; i++) {
-        if (R[i].gone) { R[i].dirty = 1; continue; }
-        if (R[i].dirty == 0) R[i].dirty = 1;           /* new */
-        else if (R[i].dirty == 3) {                    /* same size and time: unchanged, if its pieces are all there */
-            R[i].dirty = 0;
+        if (R[i].gone) { R[i].dirty = DRAW; continue; }
+        if (R[i].dirty == KEEP) R[i].dirty = DRAW;     /* not in the record: new */
+        else if (R[i].dirty == SAME_FILE) {            /* unchanged, if its pieces are all there */
+            R[i].dirty = KEEP;
             for (int k = 0; k < NV; k++) {
                 char p[1200]; pieces_path(p, sizeof p, &R[i], k);
                 FILE *t = fopen(p, "rb");
-                if (t) fclose(t); else R[i].dirty = 1;
+                if (t) fclose(t); else R[i].dirty = DRAW;
             }
         }
     }
@@ -951,24 +1084,22 @@ int main(int argc, char **argv) {
         if (g->gone) {
             for (int k = 0; k < 4; k++) { if (k < NV) iso_tiles(g, k, &iso_dirty[g->w][k]); pieces_path(p, sizeof p, g, k); remove(p); }
             ts_add(&flat_dirty[g->w], g->rx, g->rz);
-            tile_path(p, sizeof p, FLAT[g->w], 0, g->rx, g->rz); remove(p);
-            tile_path(p, sizeof p, HEIGHT[g->w], 0, g->rx, g->rz); remove(p);
+            tile_remove(FLAT[g->w], 0, g->rx, g->rz); tile_remove(HEIGHT[g->w], 0, g->rx, g->rz);
             done++; continue;
         }
         uint64_t h = fnv(rd.file, rd.len);
         int drawn_before = 1;
         for (int k = 0; k < NV && drawn_before; k++) { pieces_path(p, sizeof p, g, k); FILE *t = fopen(p, "rb"); if (t) fclose(t); else drawn_before = 0; }
-        if (g->dirty == 4 && h == g->hash && drawn_before) { g->dirty = 0; free(rd.file); rd.file = NULL; done++; continue; }
-        g->hash = h; g->dirty = 1;
+        if (g->dirty == CHECK && h == g->hash && drawn_before) { g->dirty = KEEP; free(rd.file); rd.file = NULL; done++; continue; }
+        g->hash = h; g->dirty = DRAW;
         printf("  drawing %s r.%d.%d (%d/%d)\n", WNAME[g->w], g->rx, g->rz, ++done, todo); fflush(stdout);
         read_region(&rd, g->w == 1, &c, flat, hp);
         free(rd.file); rd.file = NULL;
-        tile_path(p, sizeof p, FLAT[g->w], 0, g->rx, g->rz); png_write(p, T, T, flat, 0);
-        tile_path(p, sizeof p, HEIGHT[g->w], 0, g->rx, g->rz); png_write(p, T, T, hp, 0);
+        tile_write(FLAT[g->w], 0, g->rx, g->rz, flat, 0);
+        tile_write(HEIGHT[g->w], 0, g->rx, g->rz, hp, 0);
         ts_add(&flat_dirty[g->w], g->rx, g->rz);
         for (int k = 0; k < NV; k++) {
-            int rx = g->rx, rz = g->rz; turn_region(&rx, &rz, k);
-            int X0 = (rx - rz) * 1024 - 1022, Y0 = (rx + rz) * 512 - 254;
+            int rx, rz, X0, Y0; region_origin(g->rx, g->rz, k, &rx, &rz, &X0, &Y0);
             Pieces ps = {0};
             for (int s = 0; s < 5; s++) { S.s0 = S0[s]; S.s1 = S1[s]; draw_strip(&c, k); cut_strip(&ps, X0, Y0, tmp); }
             pieces_path(p, sizeof p, g, k);
@@ -1000,15 +1131,20 @@ int main(int argc, char **argv) {
     free(buf); free(tb); free(rgba); free(flat); free(hp); free(tmp); free(png_buf);
     for (int w = 0; w < 2; w++) { free(flat_dirty[w].xy); for (int k = 0; k < 4; k++) free(iso_dirty[w][k].xy); }
 
-    /* remember what was drawn */
-    char tmpstate[1300]; snprintf(tmpstate, sizeof tmpstate, "%s.tmp", statep);
+    /* everything's drawn: the staged tiles go into place, then the record and the tiles' mark, with a new run id
+     * (stopped before this, the site still has the last good map; stopped during it, the record and the mark don't
+     * match, so the next run starts over) */
+    each_layer(commit_dir);
+    char line[128], tmpstate[1300];
+    snprintf(line, sizeof line, "beta-map-draw " DRAW_VERSION " views %d run %lx-%lx\n", NV, (unsigned long)time(NULL), (unsigned long)clock());
+    snprintf(tmpstate, sizeof tmpstate, "%s.tmp", statep);
     sf = fopen(tmpstate, "w");
     if (!sf) { fprintf(stderr, "can't write %s\n", tmpstate); return 1; }
-    fprintf(sf, "beta-map-draw " DRAW_VERSION " views %d\n", NV);
+    fputs(line, sf);
     for (int i = 0; i < NR; i++) if (!R[i].gone)
         fprintf(sf, "%d %d %d %lld %lld %016llx\n", R[i].w, R[i].rx, R[i].rz, R[i].size, R[i].mtime, (unsigned long long)R[i].hash);
-    if (fclose(sf)) return 1;
-    remove(statep); rename(tmpstate, statep);
+    if (fclose(sf) || move_over(tmpstate, statep)) { fprintf(stderr, "can't write %s\n", statep); return 1; }
+    if (write_file(markp, line, strlen(line), NULL, 0)) { fprintf(stderr, "can't write %s\n", markp); return 1; }
     summary();
     printf("done\n");
     return 0;

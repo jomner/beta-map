@@ -15,7 +15,7 @@ What it draws:
                                page can put coordinates, places and players exactly on the 3D view
 Only reads the world; safe to run on a live server's world, but a copy (or a backup) gives a cleaner picture.
 Needs nothing but Python 3.8+ (it writes its own PNGs). Much faster: build beta-map-draw.c next to this script
-(cc -O2 -o beta-map-draw beta-map-draw.c -lz -lm) and it does the drawing, redoing only what changed."""
+(cc -std=c99 -O2 -o beta-map-draw beta-map-draw.c -lz -lm) and it does the drawing, redoing only what changed."""
 import argparse, datetime, glob, gzip, hashlib, io, json, multiprocessing, os, re, shutil, struct, subprocess, sys, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -506,8 +506,11 @@ def find_regions(world):
     regs = {'overworld': {}, 'nether': {}}
     for name, sub in (('overworld', 'region'), ('nether', os.path.join('DIM-1', 'region'))):
         for p in glob.glob(os.path.join(world, sub, 'r.*.*.mcr')):
-            m = re.search(r'r\.(-?\d+)\.(-?\d+)\.mcr$', p)
-            if m and os.path.getsize(p) > 8192: regs[name][(int(m[1]), int(m[2]))] = p
+            # the numbers written plainly ("r.0.0", never "r.00.0" or "r.-0.0") and inside the world border: one file
+            # per region, the same ones beta-map-draw takes
+            m = re.search(r'(?:^|[/\\])r\.(-?(?:0|[1-9]\d{0,5}))\.(-?(?:0|[1-9]\d{0,5}))\.mcr$', p)
+            if not m or '-0.' in '.' + m[1] + '.' + m[2] + '.' or max(abs(int(m[1])), abs(int(m[2]))) > 100000: continue
+            if os.path.getsize(p) > 8192: regs[name][(int(m[1]), int(m[2]))] = p
     return regs
 
 
@@ -597,9 +600,13 @@ def build(a):
         # the fast drawer (beta-map-draw.c): keeps the tiles in tiles/c between runs and redoes only what changed
         tiles_dir, tiles_url = os.path.join(tiles_root, 'c'), 'tiles/c'
         print('  drawing with %s' % drawer, flush=True)
-        r = subprocess.run([drawer, world, os.path.join(cache, 'c'), tiles_dir, '--png-level', str(a.png_level),
-                            '--views', str(a.views)])
-        if r.returncode: sys.exit('%s failed (exit code %d); nothing was changed on the site' % (drawer, r.returncode))
+        try:
+            r = subprocess.run([drawer, world, os.path.join(cache, 'c'), tiles_dir, '--png-level', str(a.png_level),
+                                '--views', str(a.views)])
+        except OSError as e:                           # built for another machine, not executable, ...
+            sys.exit("%s can't run here (%s). Build it again on this machine (see the README), or draw in Python "
+                     "with --no-drawer." % (drawer, e.strerror or e))
+        if r.returncode: sys.exit('%s failed (exit code %d); the site still has the last map' % (drawer, r.returncode))
         layers = json.load(open(os.path.join(cache, 'c', 'summary.json')))['layers']
     else:
         if a.views != 4: sys.exit('--views needs beta-map-draw built next to beta_map.py (see the README)')
