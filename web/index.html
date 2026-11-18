@@ -155,6 +155,10 @@
                        border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
                        border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi); }
   #watch .who button:hover { background: var(--btn-hover); }
+  /* pressed like every other button: the colours swap and the label drops 1u */
+  #watch .who button:active { background: var(--down); padding-top: var(--u); padding-bottom: 0;
+                              border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
+  #watch .who button:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #watch dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
   #watch dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
   #watch dd { margin: 0; text-align: right; }
