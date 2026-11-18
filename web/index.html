@@ -104,7 +104,7 @@
   .spawn { background: #f2c94c; border: var(--u) solid #14161a; }
   .place { background: none; border: 0; }
   .place span { position: absolute; left: 50%; bottom: calc(2 * var(--u)); transform: translateX(-50%); white-space: nowrap;
-                font: inherit; color: #fff; text-shadow: var(--u) var(--u) 0 var(--shadow); pointer-events: none; }
+                font: inherit; color: #fff; text-shadow: var(--u) var(--u) 0 var(--shadow); cursor: pointer; }   /* click: go there */
   .place i { position: absolute; left: 50%; bottom: calc(-2 * var(--u)); width: calc(3 * var(--u)); height: calc(3 * var(--u));
              margin-left: calc(-2 * var(--u)); background: #fff; border: var(--u) solid #000; }
   /* live players: their skin's face (hat layer on top), one skin pixel = u, and their name in their locator bar colour */
@@ -453,13 +453,19 @@
     marks.clearLayers();
     if (w === 'overworld' && m.spawn)
       L.marker(toLL(m.spawn[0], m.spawn[1], m.spawnY ?? WORLDS[w].ground), { icon: L.divIcon({ className: 'spawn', iconSize: [10, 10] }) })
-        .bindTooltip('Spawn ' + m.spawn[0] + ', ' + m.spawn[1]).addTo(marks);
+        .bindTooltip('Spawn ' + m.spawn[0] + ', ' + m.spawn[1], { direction: 'bottom', offset: [0, 6] }).addTo(marks);
     for (const p of m.places || []) {
       if (p.world !== w || (p.name === 'Spawn' && m.spawn)) continue;
       const mk = L.marker(toLL(p.x, p.z, p.y ?? WORLDS[w].ground), { keyboard: false,
         icon: L.divIcon({ className: 'place', iconSize: [0, 0], html: '<i></i><span></span>' }) })
-        .bindTooltip(p.name + ' ' + p.x + ', ' + p.z).addTo(marks);
+        .bindTooltip(p.x + ', ' + p.z, { direction: 'bottom', offset: [0, 6] }).addTo(marks);   // under the dot: the name is above it already
       mk.getElement().querySelector('span').textContent = p.name;
+      mk.on('click', () => {                            // click the name or the dot: glide there, a step closer (at least zoom 1)
+        unwatch();
+        target = [p.x, p.z]; targetLL = toLL(p.x, p.z, p.y ?? WORLDS[w].ground);
+        map.flyTo(targetLL, Math.max(1, Math.min(3, map.getZoom() + 1)), { duration: 0.8 });
+        map.once('moveend', () => { targetLL = map.getCenter(); });
+      });
     }
     document.querySelectorAll('[data-world]').forEach(b => b.setAttribute('aria-pressed', b.dataset.world === w));
     document.getElementById('facing').textContent = FACING[rot];
