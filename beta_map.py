@@ -14,8 +14,8 @@ What it draws:
   height, nether-height        each column's top block height (red) and whether there's a column (green), so the
                                page can put coordinates, places and players exactly on the 3D view
 Only reads the world; safe to run on a live server's world, but a copy (or a backup) gives a cleaner picture.
-Needs nothing but Python 3.8+ (it writes its own PNGs). Much faster: build beta-map-draw.c next to this script
-(cc -std=c99 -O2 -o beta-map-draw beta-map-draw.c -lz -lm) and it does the drawing, redoing only what changed."""
+The drawing is done by beta-map-draw (beta-map-draw.c), which this script builds on its first run with the C
+compiler (cc, gcc or clang; zlib needed). Without a compiler it draws in Python: the same map, much slower."""
 import argparse, datetime, glob, gzip, hashlib, io, json, multiprocessing, os, re, shutil, struct, subprocess, sys, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -594,8 +594,7 @@ def build(a):
     os.makedirs(cache, exist_ok=True)
     print('%s: %d Overworld and %d Nether region(s), as of %s UTC'
           % (world, len(regs['overworld']), len(regs['nether']), when.strftime('%Y-%m-%d %H:%M')), flush=True)
-    drawer = None if a.no_drawer else (a.drawer or next((p for p in (os.path.join(HERE, 'beta-map-draw'),
-                                                                     os.path.join(HERE, 'beta-map-draw.exe')) if os.path.isfile(p)), None))
+    drawer = None if a.no_drawer else (a.drawer or fast_drawer(cache))
     if drawer:
         # the fast drawer (beta-map-draw.c): keeps the tiles in tiles/c between runs and redoes only what changed
         tiles_dir, tiles_url = os.path.join(tiles_root, 'c'), 'tiles/c'
@@ -614,6 +613,42 @@ def build(a):
         shutil.rmtree(tiles_dir, ignore_errors=True); os.makedirs(tiles_dir)
         layers = draw_python(a, world, regs, cache, tiles_dir)
     write_site(a, out, world, day, when, spawn, next_draw, layers, tiles_root, tiles_dir, tiles_url)
+
+
+def fast_drawer(cache):
+    """The fast drawer, built from beta-map-draw.c when there's none yet or the source is newer (an update): next to
+    this script, or in the cache if that folder can't be written. None (with a warning) if there's no C compiler or
+    zlib: then the drawing is done in Python."""
+    src = os.path.join(HERE, 'beta-map-draw.c')
+    name = 'beta-map-draw.exe' if os.name == 'nt' else 'beta-map-draw'
+    places = [os.path.join(HERE, name), os.path.join(cache, name)]
+    built = [p for p in places if os.path.isfile(p)]
+    if not os.path.isfile(src):
+        return built[0] if built else None
+    fresh = [p for p in built if os.path.getmtime(p) >= os.path.getmtime(src)]
+    if fresh: return fresh[0]
+    compilers = [c for c in (os.environ.get('CC'), 'cc', 'gcc', 'clang') if c and shutil.which(c)]
+    why = 'no C compiler found (cc, gcc or clang)'
+    if compilers:
+        cc = compilers[0]
+        print('  building the fast drawer (%s)...' % cc, flush=True)
+        for out in places:                              # next to this script, or else in the cache
+            try:
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                r = subprocess.run([cc, '-std=c99', '-O2', '-o', out, src, '-lz', '-lm'], capture_output=True, text=True)
+            except OSError as e:
+                why = str(e); break
+            if r.returncode == 0 and os.path.isfile(out): return out
+            err = r.stderr.strip()
+            why = ('zlib is missing (Debian, Ubuntu, Raspberry Pi OS: sudo apt install zlib1g-dev)' if 'zlib.h' in err
+                   else 'the build failed: ' + (err.splitlines() or ['?'])[-1][:200])
+            if 'Permission denied' not in err: break      # (only a folder it can't write is worth another try)
+    if built:
+        print('  WARNING: the fast drawer could not be built again (%s); using the old one' % why, flush=True)
+        return built[0]
+    print('  WARNING: %s. Drawing in Python instead: this is much slower and needs much more memory. See "The drawer" in '
+          'the README.' % why, flush=True)
+    return None
 
 
 def draw_python(a, world, regs, cache, day_dir):
@@ -707,7 +742,7 @@ def main():
                     'own time like cron (default 00:00)')
     ap.add_argument('--cache', help='where finished region pictures are kept between runs (default: OUT-cache)')
     ap.add_argument('--jobs', type=int, help='how many processes draw at once (default: CPU cores - 1)')
-    ap.add_argument('--drawer', help='the fast drawer to use (default: beta-map-draw next to this script, if built)')
+    ap.add_argument('--drawer', help='use this drawer (default: beta-map-draw, built from beta-map-draw.c when needed)')
     ap.add_argument('--no-drawer', action='store_true', help='draw in Python even if beta-map-draw is built')
     ap.add_argument('--png-level', type=int, default=1, metavar='0-9',
                     help='with beta-map-draw: PNG compression, 1 (fast, the default) to 9 (smallest files)')
