@@ -642,7 +642,7 @@ def fast_drawer(cache):
             err = r.stderr.strip()
             why = ('zlib is missing (Debian, Ubuntu, Raspberry Pi OS: sudo apt install zlib1g-dev)' if 'zlib.h' in err
                    else 'the build failed: ' + (err.splitlines() or ['?'])[-1][:200])
-            if 'Permission denied' not in err: break      # (only a folder it can't write is worth another try)
+            if not re.search(r'Permission denied|Read-only file system', err): break   # (only a folder it can't write is worth another try)
     if built:
         print('  WARNING: the fast drawer could not be built again (%s); using the old one' % why, flush=True)
         return built[0]
