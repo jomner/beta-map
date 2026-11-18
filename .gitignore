@@ -5,3 +5,6 @@ __pycache__/
 /out-cache/
 /site/
 /site-cache/
+# the fast drawer, once built
+/beta-map-draw
+/beta-map-draw.exe

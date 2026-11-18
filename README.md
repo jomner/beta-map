@@ -5,7 +5,9 @@ directions, and cut into tiles.
 
 ![The map](screenshot.png)
 
-- **Just Python.** One script, no packages to install (Python 3.8 or newer).
+- **Just Python**, no packages to install (Python 3.8 or newer), **plus an optional fast drawer in C** (one file,
+  built with one command) that's many times faster, needs little memory and redraws only what changed. It runs
+  on small machines: a Raspberry Pi, an old laptop, even a Wii running Linux.
 - **A plain static website.** The output is a folder of files. Host it anywhere, including GitHub Pages for free.
 - **Read-only.** It only reads the world and never changes it.
 - **Optional live players** if your server writes a small `players.json` (see below): dots with faces, and a
@@ -36,9 +38,35 @@ Beta worlds in the **McRegion** format: Beta 1.3 to Beta 1.8, where the world fo
    then open http://localhost:8000. Opening `index.html` straight from the folder doesn't work, because browsers
    block a page on your disk from loading its own map files.
 
-A first run takes a while: a world with 67 region files (each covers 512 x 512 blocks) took 1.5 minutes on a
-12-core PC. The finished region pictures are kept in `site-cache`, so the next run only redraws the regions that
-changed (the same world again: under 30 seconds).
+In Python, a first run takes a while: a world with 67 region files (each covers 512 x 512 blocks) took 1.5
+minutes on a 12-core PC. The finished region pictures are kept in `site-cache`, so the next run only redraws the
+regions that changed (the same world again: under 30 seconds). For anything faster, or a small machine, build the
+fast drawer:
+
+### The fast drawer (recommended)
+
+`beta-map-draw.c` does all the drawing in C. Build it once, next to `beta_map.py`, and `beta_map.py` uses it on its
+own from then on (same command, same website, the same pixels):
+
+```
+cc -O2 -o beta-map-draw beta-map-draw.c -lz -lm
+```
+
+It needs a C compiler and zlib, which most Linux systems have (Debian, Ubuntu, Raspberry Pi OS:
+`sudo apt install gcc zlib1g-dev`; macOS: `xcode-select --install`). On Windows, use WSL, or just keep the Python
+drawing.
+
+- **Fast:** a world of 67 region files (246 MB) draws in 34 seconds on one core of a PC, against 1.5 minutes on
+  12 cores in Python, and in 14 seconds with `--views 1`. A slow machine takes longer in proportion (a 700 MHz
+  single-core board: roughly 10 to 15 minutes for that first draw), but after that only changes are redrawn.
+- **Little memory:** about 35 MB, however big the world (Python needs 120 MB or more per process).
+- **Only what changed:** it keeps the finished tiles between runs, checks which region files changed (by size and
+  time, then by contents), redraws only those, and rebuilds only the tiles they touch. Nothing changed: under a
+  second. One region changed: a couple of seconds on a PC.
+- **For very slow machines:** `--views 1` draws the world from one direction instead of four (a quarter of the
+  work and of the disk space); the page then has no turn buttons.
+
+It never changes the world, and a run that fails leaves the website as it was.
 
 ### Options
 
@@ -52,7 +80,18 @@ changed (the same world again: under 30 seconds).
 | `--every HOURS` | If you redraw the map on a schedule (cron, Task Scheduler), how many hours apart (1, 2, 3, 4, 6, 8, 12 or 24). The page then shows "Next update 6:30 PM (in 2h 5m)" in each viewer's own time zone. It's worked out from the clock, so keep it the same as your schedule |
 | `--at HH:MM` | With `--every`: the time of one of the redraws, in your computer's own time like cron (default `00:00`). Example: cron `30 */6 * * *` is `--every 6 --at 00:30` |
 | `--cache DIR` | Where the region pictures are kept between runs (default: the output folder's name plus `-cache`) |
-| `--jobs N` | How many processes draw at once (default: your CPU cores minus one) |
+| `--jobs N` | Python drawing: how many processes draw at once (default: your CPU cores minus one) |
+| `--views N` | Fast drawer: how many of the four directions to draw, 1 to 4 (default 4). 1 is a quarter of the work, and the page has no turn buttons |
+| `--png-level N` | Fast drawer: how hard to compress the tiles, 1 (fastest, the default) to 9 (smallest files, slower) |
+| `--drawer PATH` | Fast drawer: use this one (default: `beta-map-draw` next to `beta_map.py`, if it's been built) |
+| `--no-drawer` | Draw in Python even if the fast drawer is built |
+
+### Your own changes to the page
+
+Don't edit `index.html`: every draw copies a fresh one into the site, and updating beta-map replaces it. Put your
+changes in `custom.css` and `custom.js` in the site folder instead (next to `index.html`). The page loads them if
+they're there, and beta-map never writes or replaces them, so they survive every redraw and every update. CSS can
+restyle anything (colours, sizes, hiding a panel); `custom.js` runs after the page is set up, for anything else.
 
 ## Putting it online with GitHub Pages
 
@@ -110,6 +149,12 @@ Optionally, a `profiles.json` next to `players.json` gives players a skin face a
 - **Heights:** a hidden layer stores each column's height, so coordinates under the cursor, place markers and player
   dots sit exactly on the 3D picture.
 - **Minimap:** a top-down picture, one pixel per block.
+- **The fast drawer** reads each changed region file once (32 chunks at a time; a column's picture depends on the
+  ground up to 12 blocks around it, so three rows of chunks are enough), keeps only the blocks each column can
+  show, and draws the 2048 px wide picture of a region in 512 px strips that line up with the tiles: every pixel
+  column comes from just one diagonal of blocks. Each region's drawing is kept cut into tile pieces in the cache, so
+  a tile is rebuilt from its pieces when one of the regions under it changes. The tiles stay in `site/tiles/c`
+  between runs; each address ends in `?v=` and the draw's id, so browsers never show an old one.
 
 ## Credits and licences
 

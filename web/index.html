@@ -208,6 +208,11 @@
   #title p#online { cursor: pointer; }
   #title p#online:hover { text-decoration: underline; }
   @media (hover: none) { #players { bottom: 16px; } }      /* phones: no coordinates box under it */
+  /* the coordinates box: click it to copy them */
+  #coords { cursor: pointer; }
+  #coords:hover { background: var(--btn-hover); }
+  #coords:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
+  #coords.copied { color: #ffff55; text-shadow: var(--u) var(--u) 0 #3f3f15; }   /* the game's yellow */
   @media (hover: none) { #coords { display: none; } }
   @media (max-width: 600px) {
     #side { width: calc(152 * var(--u)); }
@@ -221,6 +226,9 @@
     .row button.turn:active, .row button.turn[aria-pressed] { padding: 10px 0 9px; }
   }
 </style>
+<!-- your own changes, if you have any: custom.css and custom.js next to this page. beta_map.py never writes or
+     replaces them, so they survive updating beta-map and every redraw (see the README) -->
+<link rel="stylesheet" href="custom.css" onerror="this.remove()">
 </head>
 <body>
 <div id="map"></div>
@@ -264,6 +272,11 @@
   try { m = await (await fetch('map.json', { cache: 'no-store' })).json(); }
   catch (e) { document.getElementById('asof').textContent = 'Not drawn yet'; return; }
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAABQWGgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+  // where the tiles are: map.json "tiles" (beta-map-draw keeps them in one folder between draws, so the draw's id goes
+  // on the end of each address and browsers don't show old ones); older map.json: tiles/<id>
+  const TILES = m.tiles || 'tiles/' + m.id, V = m.tiles ? '?v=' + encodeURIComponent(m.id) : '';
+  // drawn in one direction only (beta_map.py --views 1): no turn buttons
+  if (!m.layers.iso1) document.getElementById('left').parentElement.hidden = true;
   if (m.title) document.getElementById('name').textContent = document.title = m.title;
   // "Visitors" (bottom right): players who have ever joined, six digits, the leading zeros dimmed
   function counter(n) {
@@ -335,7 +348,7 @@
         H[key] = g.getImageData(0, 0, 512, 512).data; done(); loaded();
       };
       img.onerror = () => { H[key] = null; done(); loaded(); };
-      img.src = 'tiles/' + m.id + '/' + WORLDS[world].height + '/0/' + rx + '_' + rz + '.png';
+      img.src = TILES + '/' + WORLDS[world].height + '/0/' + rx + '_' + rz + '.png' + V;
     });
   }
   async function heightNow(x, z) {
@@ -366,12 +379,13 @@
   }
   const flatLL = (x, z) => L.latLng(-z, x);
   const boundsOf = b => b && L.latLngBounds(L.latLng(-b[1], b[0]), L.latLng(-b[3], b[2]));
-  const layerOf = (name, extra) => L.tileLayer('tiles/' + m.id + '/' + name + '/{z}/{x}_{y}.png', Object.assign({
+  const layerOf = (name, extra) => L.tileLayer(TILES + '/' + name + '/{z}/{x}_{y}.png' + V, Object.assign({
     tileSize: m.tile, minNativeZoom: m.minZoom, maxNativeZoom: 0, noWrap: true,
     bounds: boundsOf(m.layers[name] && m.layers[name].bounds), errorTileUrl: BLANK, keepBuffer: 4 }, extra));
 
   const map = L.map('map', { crs: L.CRS.Simple, minZoom: m.minZoom, maxZoom: 3, zoomSnap: 1, attributionControl: false });
-  const mini = L.map('mini', { crs: L.CRS.Simple, minZoom: m.minZoom, maxZoom: 2, zoomControl: false, attributionControl: false,
+  const MINI_OUT = 3;                                  // the minimap goes this much further out than the tiles
+  const mini = L.map('mini', { crs: L.CRS.Simple, minZoom: m.minZoom - MINI_OUT, maxZoom: 2, zoomControl: false, attributionControl: false,
     dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false });
   let main = null, small = null, outline = null, marks = L.layerGroup().addTo(map);
 
@@ -391,7 +405,7 @@
     if (torchLayer) { torchLayer.remove(); torchLayer = null; }
     const name = WORLDS[world].iso + rot + '-torches', info = m.layers[name];
     if (!prefs.torches || !info || !info.list) return;
-    torchLayer = new TorchLayer('tiles/' + m.id + '/' + name + '/{z}/{x}_{y}.png', { tileSize: m.tile,
+    torchLayer = new TorchLayer(TILES + '/' + name + '/{z}/{x}_{y}.png' + V, { tileSize: m.tile,
       minZoom: 0, maxZoom: 3, minNativeZoom: 0, maxNativeZoom: 0, noWrap: true, errorTileUrl: NONE, keepBuffer: 4,
       have: new Set(info.list) }).addTo(map);
   }
@@ -425,13 +439,15 @@
   async function show(w, x, z, zoom, k) {
     if (!WORLDS[w] || !m.layers[WORLDS[w].iso + '0']) w = 'overworld';
     const newWorld = w !== world;
+    if (newWorld) miniY = null;
     world = w; rot = ((k % 4) + 4) % 4;
+    if (!m.layers[WORLDS[w].iso + rot]) rot = 0;             // drawn with fewer directions (--views)
     x = Math.floor(x); z = Math.floor(z);
     const y = await heightNow(x, z);
     if (main) main.remove();
     main = layerOf(WORLDS[w].iso + rot, { minZoom: m.minZoom, maxZoom: 3 }).addTo(map);
     drawTorches();
-    if (newWorld || !small) { if (small) small.remove(); small = layerOf(WORLDS[w].mini, { minZoom: m.minZoom, maxZoom: 2 }).addTo(mini); }
+    if (newWorld || !small) { if (small) small.remove(); small = layerOf(WORLDS[w].mini, { minZoom: m.minZoom - MINI_OUT, maxZoom: 2 }).addTo(mini); }
     map.setView(toLL(x, z, y), zoom, { animate: false });   // a jump: the center is right at once
     target = [x, z]; targetLL = map.getCenter();
     marks.clearLayers();
@@ -745,9 +761,12 @@
   // the block at the middle of the screen: exact once the heights along the way are in; until then where show() put
   // the view (if it hasn't moved since), else a guess at the usual ground height
   function center(exactOnly) {
-    const c = map.getCenter(), p = pick(c);
+    const c = map.getCenter();
+    // the view is where show() (a link, a place, a player, the minimap) put it: that spot, not whatever block is
+    // seen there (something tall in front of it would move the link every time it's opened)
+    if (target && targetLL && c.equals(targetLL)) return target;
+    const p = pick(c);
     if (p) return [p[0], p[1]];
-    if (p === undefined && target && targetLL && c.equals(targetLL)) return target;
     if (p === undefined && exactOnly) return null;
     return guess(c, WORLDS[world].ground).map(Math.floor);
   }
@@ -756,12 +775,25 @@
     clearTimeout(soon);
     soon = setTimeout(() => { if (!world) return; follow(); save(); if (last) showCoords(last); }, 50);
   }
-  // the minimap follows the main view and outlines what it shows
+  // the minimap follows the main view and outlines what it shows. Both use one ground height for the whole view:
+  // the average of the heights around the middle (5 x 5 spots 8 blocks apart), eased a little each time, so it
+  // glides instead of jumping between a tower's top and the ground behind it as you pan.
+  let miniY = null;
   function follow() {
-    const b = map.getBounds(), [cx, cz] = center();
-    const hy = heightAt(cx, cz), y = hy == null ? WORLDS[world].ground : hy;
-    const pts = [b.getNorthWest(), b.getNorthEast(), b.getSouthEast(), b.getSouthWest()].map(p => flatLL(...guess(p, y)));
-    mini.setView(flatLL(cx, cz), Math.max(m.minZoom, Math.min(2, map.getZoom() - 3)), { animate: false });
+    const c = map.getCenter(), b = map.getBounds();
+    let y = miniY == null ? WORLDS[world].ground : miniY;
+    for (let pass = 0; pass < 2; pass++) {
+      const [x, z] = guess(c, y).map(Math.floor); let sum = 0, n = 0;
+      for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+        const h = heightAt(x + 8 * i, z + 8 * j);
+        if (h != null) { sum += h; n++; }               // (still loading, or nothing there: left out)
+      }
+      if (n) y = sum / n;
+    }
+    miniY = miniY == null ? y : miniY + (y - miniY) * 0.3;
+    const [cx, cz] = guess(c, miniY);
+    const pts = [b.getNorthWest(), b.getNorthEast(), b.getSouthEast(), b.getSouthWest()].map(p => flatLL(...guess(p, miniY)));
+    mini.setView(flatLL(cx, cz), Math.min(2, map.getZoom() - 3), { animate: false });
     if (outline) outline.setLatLngs(pts);
     else outline = L.polygon(pts, { color: '#fff', weight: 1.5, fill: false, interactive: false }).addTo(mini);
   }
@@ -816,9 +848,22 @@
   });
   function showCoords(ll) {
     const p = pick(ll);
-    if (p) coords.textContent = 'x ' + p[0] + ', y ' + p[2] + ', z ' + p[1];
-    else { const [x, z] = guess(ll, WORLDS[world].ground).map(Math.floor); coords.textContent = '≈ x ' + x + ', z ' + z; }
+    if (copyTimer) return;                             // still saying "Copied"
+    if (p) { coords.textContent = 'x ' + p[0] + ', y ' + p[2] + ', z ' + p[1]; copyText = p[0] + ' ' + p[2] + ' ' + p[1]; }
+    else { const [x, z] = guess(ll, WORLDS[world].ground).map(Math.floor); coords.textContent = '≈ x ' + x + ', z ' + z; copyText = x + ' ' + z; }
   }
+  // click the box (or Enter on it): copy the coordinates as "x y z", for a note, a sign or chat
+  let copyText = '', copyTimer = 0;
+  coords.title = 'Click to copy'; coords.tabIndex = 0; coords.setAttribute('role', 'button');
+  async function copyCoords() {
+    if (!copyText) return;
+    try { await navigator.clipboard.writeText(copyText); } catch (e) { return; }   // (no clipboard: nothing)
+    clearTimeout(copyTimer);
+    coords.textContent = 'Copied ' + copyText; coords.classList.add('copied');
+    copyTimer = setTimeout(() => { copyTimer = 0; coords.classList.remove('copied'); if (last) showCoords(last); }, 1200);
+  }
+  coords.onclick = copyCoords;
+  coords.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); copyCoords(); } };
   map.on('mousemove', e => { last = e.latlng; showCoords(e.latlng); });
   if (m.live) {
     playtime(); setInterval(playtime, 60000);
@@ -830,5 +875,6 @@
   }
 })();
 </script>
+<script src="custom.js" onerror="this.remove()"></script>
 </body>
 </html>

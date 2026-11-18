@@ -14,8 +14,9 @@ What it draws:
   height, nether-height        each column's top block height (red) and whether there's a column (green), so the
                                page can put coordinates, places and players exactly on the 3D view
 Only reads the world; safe to run on a live server's world, but a copy (or a backup) gives a cleaner picture.
-Needs nothing but Python 3.8+ (it writes its own PNGs)."""
-import argparse, datetime, glob, gzip, hashlib, io, json, multiprocessing, os, re, shutil, struct, sys, zlib
+Needs nothing but Python 3.8+ (it writes its own PNGs). Much faster: build beta-map-draw.c next to this script
+(cc -O2 -o beta-map-draw beta-map-draw.c -lz -lm) and it does the drawing, redoing only what changed."""
+import argparse, datetime, glob, gzip, hashlib, io, json, multiprocessing, os, re, shutil, struct, subprocess, sys, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, 'web')
@@ -586,10 +587,30 @@ def build(a):
         except ValueError: sys.exit('--spawn: give it as X,Z')
     day = when.strftime('%Y-%m-%d_%H%M%S')
     cache = os.path.abspath(a.cache or out.rstrip('/\\') + '-cache')
-    tiles_root = os.path.join(out, 'tiles'); day_dir = os.path.join(tiles_root, day)
-    os.makedirs(cache, exist_ok=True); shutil.rmtree(day_dir, ignore_errors=True); os.makedirs(day_dir)
+    tiles_root = os.path.join(out, 'tiles')
+    os.makedirs(cache, exist_ok=True)
     print('%s: %d Overworld and %d Nether region(s), as of %s UTC'
           % (world, len(regs['overworld']), len(regs['nether']), when.strftime('%Y-%m-%d %H:%M')), flush=True)
+    drawer = None if a.no_drawer else (a.drawer or next((p for p in (os.path.join(HERE, 'beta-map-draw'),
+                                                                     os.path.join(HERE, 'beta-map-draw.exe')) if os.path.isfile(p)), None))
+    if drawer:
+        # the fast drawer (beta-map-draw.c): keeps the tiles in tiles/c between runs and redoes only what changed
+        tiles_dir, tiles_url = os.path.join(tiles_root, 'c'), 'tiles/c'
+        print('  drawing with %s' % drawer, flush=True)
+        r = subprocess.run([drawer, world, os.path.join(cache, 'c'), tiles_dir, '--png-level', str(a.png_level),
+                            '--views', str(a.views)])
+        if r.returncode: sys.exit('%s failed (exit code %d); nothing was changed on the site' % (drawer, r.returncode))
+        layers = json.load(open(os.path.join(cache, 'c', 'summary.json')))['layers']
+    else:
+        if a.views != 4: sys.exit('--views needs beta-map-draw built next to beta_map.py (see the README)')
+        tiles_dir, tiles_url = os.path.join(tiles_root, day), 'tiles/' + day
+        shutil.rmtree(tiles_dir, ignore_errors=True); os.makedirs(tiles_dir)
+        layers = draw_python(a, world, regs, cache, tiles_dir)
+    write_site(a, out, world, day, when, spawn, next_draw, layers, tiles_root, tiles_dir, tiles_url)
+
+
+def draw_python(a, world, regs, cache, day_dir):
+    """The drawing in Python (no beta-map-draw built): every run draws a new tiles folder. Returns the layers."""
     layers, keep = {}, set()
     pool = multiprocessing.Pool(a.jobs or max(1, (os.cpu_count() or 2) - 1))
     try:
@@ -634,11 +655,14 @@ def build(a):
             if f not in keep: os.remove(f)
     finally:
         pool.close(); pool.join()
+    return layers
 
+
+def write_site(a, out, world, day, when, spawn, next_draw, layers, tiles_root, tiles_dir, tiles_url):
     # map.json: what the page shows
     hcache = {}
     def height(w, x, z):                               # the top block's height there; None if unknown
-        name = os.path.join(day_dir, 'height' if w == 'overworld' else 'nether-height', '0', '%d_%d.png' % (x >> 9, z >> 9))
+        name = os.path.join(tiles_dir, 'height' if w == 'overworld' else 'nether-height', '0', '%d_%d.png' % (x >> 9, z >> 9))
         if name not in hcache: hcache[name] = png_read(name) if os.path.exists(name) else None
         hp = hcache[name]; i = 3 * ((z & 511) * T + (x & 511))
         return hp[i] if hp and hp[i + 1] else None
@@ -649,7 +673,7 @@ def build(a):
             'players': None if a.no_player_count else players_ever(world), 'next': next_draw,
             # the names too, for the players list (only shown with live players): everyone from before livemap.lua
             'everyone': player_names(world) if a.live and not a.no_player_count else None,
-            'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places}
+            'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places, 'tiles': tiles_url}
     for f in os.listdir(WEB):
         shutil.copy(os.path.join(WEB, f), os.path.join(out, f))
     open(os.path.join(out, '.nojekyll'), 'w').close()  # GitHub Pages: serve the files as they are
@@ -657,7 +681,7 @@ def build(a):
     with open(tmp, 'w') as f: json.dump(info, f)
     os.replace(tmp, os.path.join(out, 'map.json'))
     for d in glob.glob(os.path.join(tiles_root, '*')):   # older maps go once the new one is in place
-        if os.path.basename(d) != day: shutil.rmtree(d, ignore_errors=True)
+        if os.path.abspath(d) != os.path.abspath(tiles_dir): shutil.rmtree(d, ignore_errors=True)
     print('Done: open %s through a web server (see the README).' % os.path.join(out, 'index.html'))
 
 
@@ -676,7 +700,16 @@ def main():
                     'own time like cron (default 00:00)')
     ap.add_argument('--cache', help='where finished region pictures are kept between runs (default: OUT-cache)')
     ap.add_argument('--jobs', type=int, help='how many processes draw at once (default: CPU cores - 1)')
-    build(ap.parse_args())
+    ap.add_argument('--drawer', help='the fast drawer to use (default: beta-map-draw next to this script, if built)')
+    ap.add_argument('--no-drawer', action='store_true', help='draw in Python even if beta-map-draw is built')
+    ap.add_argument('--png-level', type=int, default=1, metavar='0-9',
+                    help='with beta-map-draw: PNG compression, 1 (fast, the default) to 9 (smallest files)')
+    ap.add_argument('--views', type=int, default=4, choices=(1, 2, 3, 4),
+                    help='with beta-map-draw: how many of the four directions to draw (1: a quarter of the work, '
+                         'and the page has no turn buttons)')
+    a = ap.parse_args()
+    if a.views != 4 and a.no_drawer: sys.exit('--views needs beta-map-draw (the Python drawing always does all four)')
+    build(a)
 
 
 if __name__ == '__main__':
