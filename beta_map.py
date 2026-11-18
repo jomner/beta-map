@@ -717,7 +717,15 @@ def write_site(a, out, world, day, when, spawn, next_draw, layers, tiles_root, t
             'everyone': player_names(world) if a.live and not a.no_player_count else None,
             'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places, 'tiles': tiles_url}
     for f in os.listdir(WEB):
-        shutil.copy(os.path.join(WEB, f), os.path.join(out, f))
+        if f == 'index.html':                          # the title in the page itself too, for link previews (Discord...)
+            import html
+            page = open(os.path.join(WEB, f), encoding='utf-8').read()
+            t = html.escape(a.title)
+            page = page.replace('<title>Beta map</title>', '<title>%s</title>' % t, 1) \
+                       .replace('<h1 id="name">Beta map</h1>', '<h1 id="name">%s</h1>' % t, 1)
+            with open(os.path.join(out, f), 'w', encoding='utf-8', newline='\n') as o: o.write(page)
+        else:
+            shutil.copy(os.path.join(WEB, f), os.path.join(out, f))
     open(os.path.join(out, '.nojekyll'), 'w').close()  # GitHub Pages: serve the files as they are
     tmp = os.path.join(out, 'map.json.tmp')
     with open(tmp, 'w') as f: json.dump(info, f)
