@@ -524,11 +524,18 @@ def level_info(world):
     return spawn, datetime.datetime.fromtimestamp(max(times), datetime.timezone.utc) if times else datetime.datetime.now(datetime.timezone.utc)
 
 
-def players_ever(world):
-    """How many players have ever joined: the world keeps players/NAME.dat for each (Bedrock players through a proxy
-    often have names starting with "."), counted once per name whatever the case. None without a players folder."""
-    try: return len({f[:-4].lower() for f in os.listdir(os.path.join(world, 'players')) if f.endswith('.dat')})
+def player_names(world):
+    """Everyone who has ever joined: the world keeps players/NAME.dat for each (Bedrock players through a proxy often
+    have names starting with "."), once per name whatever the case, sorted. None without a players folder."""
+    try: files = [f[:-4] for f in os.listdir(os.path.join(world, 'players')) if f.endswith('.dat')]
     except OSError: return None
+    return sorted({n.lower(): n for n in files}.values(), key=str.lower)
+
+
+def players_ever(world):
+    """How many players have ever joined (see player_names). None without a players folder."""
+    names = player_names(world)
+    return None if names is None else len(names)
 
 
 def sha(p):
@@ -640,6 +647,8 @@ def build(a):
     info = {'id': day, 'title': a.title, 'taken': when.strftime('%Y-%m-%d %H:%M'), 'spawn': spawn,
             'spawnY': height('overworld', *spawn) if spawn else None, 'live': a.live,
             'players': None if a.no_player_count else players_ever(world), 'next': next_draw,
+            # the names too, for the players list (only shown with live players): everyone from before livemap.lua
+            'everyone': player_names(world) if a.live and not a.no_player_count else None,
             'tile': T, 'minZoom': MIN_ZOOM, 'layers': layers, 'places': places}
     for f in os.listdir(WEB):
         shutil.copy(os.path.join(WEB, f), os.path.join(out, f))

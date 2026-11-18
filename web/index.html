@@ -122,10 +122,27 @@
   .live b::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
                    background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }       /* the hat layer of the skin */
   .minidot { background: var(--c, #7cff6b); border: var(--u) solid #000; }
-  /* "Visitors": players who ever joined (map.json "players"), an old-web hit counter: each digit in its own sunk slot */
+  /* a player's face: their skin's face with the hat layer, one skin pixel = u; their locator bar colour behind */
+  .face { flex: none; position: relative; box-sizing: content-box; width: calc(8 * var(--u)); height: calc(8 * var(--u));
+          border: var(--u) solid #000; background-color: var(--c, #8a8a8a); background-repeat: no-repeat;
+          background-size: calc(64 * var(--u)) auto; background-position: calc(-8 * var(--u)) calc(-8 * var(--u));
+          image-rendering: pixelated; }
+  .face::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
+                 background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }
+  /* ---- players (bottom left, above the coordinates): one line when closed; open, it grows upward into the list
+     of everyone who ever joined, or one player's card */
+  #players { left: 14px; bottom: calc(16px + 27 * var(--u)); padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
+             display: flex; flex-direction: column; gap: calc(3 * var(--u)); }
+  #players.open { width: calc(184 * var(--u)); max-width: calc(100vw - 28px); }
+  @media (hover: none) { #players { bottom: 16px; } }      /* phones: no coordinates box under it */
+  /* "Visitors": players who ever joined, an old-web hit counter: each digit in its own sunk slot; with live players,
+     click it for the list */
   #visits { bottom: 16px; right: 14px; padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
             display: grid; gap: calc(2 * var(--u)); justify-items: center; }
   #visits .lbl { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #visits.click { cursor: pointer; }
+  #visits.click:hover .lbl { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
+  #visits:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: calc(2 * var(--u)); }
   #prefs:not([hidden]) ~ #visits { bottom: 120px; }
   #odo { display: flex; gap: var(--u); }
   #odo i { font-style: normal; display: block; width: calc(8 * var(--u)); padding: var(--u) 0 calc(2 * var(--u));
@@ -133,44 +150,64 @@
            border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
            border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
   #odo i.lead { color: #6a5f5f; text-shadow: none; }          /* the leading zeros, dimmed like an unlit wheel */
-  /* following a player (click their face or name): their stats, bottom left above the coordinates */
+  /* clicking a player on the map follows them */
   .live b, .live span { cursor: pointer; }
   .live span { pointer-events: auto; }
   /* the followed player: a yellow outline slowly fading to a whiter yellow and back */
   .live.watched b { box-shadow: 0 0 0 var(--u) #f2c94c; animation: watched 1.6s ease-in-out infinite alternate; }
   @keyframes watched { to { box-shadow: 0 0 0 var(--u) #fff4b8; } }
   @media (prefers-reduced-motion: reduce) { .live.watched b { animation: none; } }
-  #watch { left: 14px; bottom: calc(16px + 27 * var(--u)); padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
-           min-width: calc(104 * var(--u)); }
-  #watch .who { display: flex; align-items: center; gap: calc(4 * var(--u)); margin-bottom: calc(3 * var(--u)); }
-  #watch .who b { flex: none; position: relative; width: calc(8 * var(--u)); height: calc(8 * var(--u));
-                  border: var(--u) solid #000; background-color: var(--c, #7cff6b); background-repeat: no-repeat;
-                  background-size: calc(64 * var(--u)) auto; background-position: calc(-8 * var(--u)) calc(-8 * var(--u));
-                  image-rendering: pixelated; }
-  #watch .who b::after { content: ""; position: absolute; inset: 0; background: inherit; background-color: transparent;
-                         background-position: calc(-40 * var(--u)) calc(-8 * var(--u)); }
-  #watch .who span { flex: 1; color: var(--c, #7cff6b); }
-  #watch .who button { flex: none; font: inherit; color: var(--text); background: var(--btn); cursor: pointer;
-                       padding: 0 calc(3 * var(--u)) var(--u); text-shadow: var(--u) var(--u) 0 var(--shadow);
-                       border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
-                       border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi); }
-  #watch .who button:hover { background: var(--btn-hover); }
-  /* pressed like every other button: the colours swap and the label drops 1u */
-  #watch .who button:active { background: var(--down); padding-top: var(--u); padding-bottom: 0;
-                              border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
-  #watch .who button:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
-  #watch dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
-  #watch dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
-  #watch dd { margin: 0; text-align: right; }
-  #watch .gone { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
-  /* "N online": click for the list of who, click a name to follow them */
+  #pl-head { order: 2; display: flex; gap: calc(6 * var(--u)); justify-content: space-between; align-items: baseline;
+             font: inherit; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer;
+             text-shadow: var(--u) var(--u) 0 var(--shadow); white-space: nowrap; }
+  #pl-head .on { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
+  #pl-head .all { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #pl-head:hover .all, #pl-head[aria-expanded="true"] .all { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
+  #pl-head:focus-visible, #players button:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
+  #pl-body { order: 1; display: grid; gap: calc(3 * var(--u)); }
+  /* the list: a dark sunk well (like the old counter's wheels) so every name colour reads */
+  #pl-list { max-height: min(calc(220 * var(--u)), max(calc(60 * var(--u)), calc(100vh - 150 * var(--u) - 60px)));
+             overflow-y: auto; box-sizing: border-box; background: #2e2828; padding: calc(2 * var(--u));
+             border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+             border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
+  #pl-list h2 { margin: calc(2 * var(--u)) calc(2 * var(--u)) var(--u); font: inherit; color: var(--dim);
+                text-shadow: var(--u) var(--u) 0 #000; }
+  #pl-list h2:first-child { margin-top: 0; }
+  #pl-list button { display: flex; align-items: center; gap: calc(4 * var(--u)); width: 100%; box-sizing: border-box;
+                    font: inherit; text-align: left; background: none; border: 0; cursor: pointer;
+                    padding: var(--u) calc(2 * var(--u)); color: var(--c, #e8e8e8); text-shadow: var(--u) var(--u) 0 #000; }
+  #pl-list button:hover { background: #4a4242; }
+  #pl-list .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #pl-list .r { flex: none; color: var(--dim); }
+  #pl-search { font: inherit; color: var(--text); background: #2e2828; box-sizing: border-box; width: 100%;
+                padding: var(--u) calc(3 * var(--u)) calc(2 * var(--u)); text-shadow: var(--u) var(--u) 0 #000;
+                border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+                border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); outline: none; }
+  #pl-search::placeholder { color: #8a7f7f; }
+  #pl-search:focus { border-color: #f2c94c; }
+  /* a player's card */
+  #pl-card .who { display: flex; align-items: center; gap: calc(4 * var(--u)); margin-bottom: calc(3 * var(--u)); }
+  /* min-width 0 (on the card, a grid item, and on the name): a long name shrinks (ending in "…") instead of pushing
+     the Follow button out of the panel */
+  #pl-card { min-width: 0; }
+  #pl-card .who span { flex: 1; min-width: 0; color: var(--c, #e8e8e8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the card's buttons: the same look and press as the panel's other buttons (.row button), just smaller */
+  #players .btn { flex: none; font: inherit; color: var(--text); background: var(--btn); cursor: pointer;
+                  padding: 0 calc(3 * var(--u)) var(--u); text-shadow: var(--u) var(--u) 0 var(--shadow);
+                  border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+                  border-color: var(--btn-hi) var(--btn-lo) var(--btn-lo) var(--btn-hi); }
+  #players .btn:hover { background: var(--btn-hover); }
+  #players .btn:active, #players .btn[aria-pressed="true"] {
+    background: var(--down); padding-top: var(--u); padding-bottom: 0;
+    border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
+  #pl-card dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
+  #pl-card dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #pl-card dd { margin: 0; text-align: right; }
+  #pl-card dd.live { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
+  /* "N online" in the title opens the list */
   #title p#online { cursor: pointer; }
   #title p#online:hover { text-decoration: underline; }
-  #roster { display: grid; justify-items: start; margin-top: calc(2 * var(--u)); }
-  #roster button { font: inherit; background: none; border: 0; padding: var(--u) 0; cursor: pointer;
-                   color: var(--c, #7cff6b); text-shadow: var(--u) var(--u) 0 #000; }
-  #roster button:hover { text-decoration: underline; }
-  @media (hover: none) { #watch { bottom: 16px; } }
+  @media (hover: none) { #players { bottom: 16px; } }      /* phones: no coordinates box under it */
   @media (hover: none) { #coords { display: none; } }
   @media (max-width: 600px) {
     #side { width: calc(152 * var(--u)); }
@@ -187,7 +224,7 @@
 </head>
 <body>
 <div id="map"></div>
-<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p><div id="roster" hidden></div></div>
+<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p></div>
 <div id="side" class="panel">
   <div id="well"><div id="mini" title="Click to go there"></div></div>
   <div class="row" role="group" aria-label="World">
@@ -204,10 +241,22 @@
   <div class="row"><button id="gear" aria-expanded="false">Settings</button></div>
 </div>
 <div id="coords" class="panel">x –, z –</div>
-<!-- following a player: who, where, and this session's stats from livemap.lua -->
-<div id="watch" class="panel" hidden><div class="who"><b></b><span id="w-name"></span><button id="w-close" title="Stop following (Esc)" aria-label="Stop following">x</button></div><dl id="w-stats"></dl></div>
-<!-- how many players have ever joined (counted by beta_map.py from the world's player files when it drew the map) -->
+<!-- how many players have ever joined: everyone in the players list, or (no live players) beta_map.py's count of
+     the world's player files -->
 <div id="visits" class="panel" hidden><span class="lbl">Visitors</span><span id="odo" role="img"></span></div>
+<!-- players: everyone who ever joined (map.json "everyone" from the world's player files, and playtime.json from
+     livemap.lua), faces and colours (profiles.json), who's online and their stats (players.json from livemap.lua) -->
+<div id="players" class="panel" hidden>
+  <button id="pl-head" aria-expanded="false" aria-controls="pl-body" title="Everyone who has played here"><span class="all">Players</span><span class="on" id="pl-on"></span></button>
+  <div id="pl-body" hidden>
+    <input id="pl-search" type="search" placeholder="Search players" aria-label="Search players" autocomplete="off" spellcheck="false">
+    <div id="pl-list"></div>
+    <div id="pl-card" hidden>
+      <div class="who"><button class="btn" id="pl-back" title="Back to the list" aria-label="Back to the list">&lt;</button><b class="face"></b><span id="pl-name"></span><button class="btn" id="pl-follow">Follow</button></div>
+      <dl id="pl-stats"></dl>
+    </div>
+  </div>
+</div>
 <script src="leaflet.js"></script>
 <script>
 (async function () {
@@ -217,13 +266,16 @@
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAABQWGgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
   if (m.title) document.getElementById('name').textContent = document.title = m.title;
   // "Visitors" (bottom right): players who have ever joined, six digits, the leading zeros dimmed
-  if (Number.isFinite(m.players)) {
-    const s = String(Math.max(0, Math.floor(m.players))).padStart(6, '0'), lead = s.search(/[1-9]|.$/);
+  function counter(n) {
+    const s = String(Math.max(0, Math.floor(n))).padStart(6, '0'), lead = s.search(/[1-9]|.$/);
     const odo = document.getElementById('odo');
+    if (odo.dataset.n === s) return;
+    odo.dataset.n = s;
     odo.replaceChildren(...[...s].map((c, i) => { const e = document.createElement('i'); e.textContent = c; if (i < lead) e.className = 'lead'; return e; }));
-    odo.setAttribute('aria-label', m.players + ' players have joined');
+    odo.setAttribute('aria-label', n + ' players have joined');
     document.getElementById('visits').hidden = false;
   }
+  if (Number.isFinite(m.players)) counter(m.players);
   // when the world was last saved: map.json has it in UTC, shown in the viewer's own time zone
   const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
   document.getElementById('asof').textContent =
@@ -425,6 +477,11 @@
     const face = el.querySelector('b');
     if (face) face.style.backgroundImage = skin ? 'url("' + skin + '")' : 'none';
   }
+  const U = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 2;   // px per pixel
+  function tipTo(e, x, y, z) {
+    const c = Math.floor(x) + ', ' + Math.floor(y) + ', ' + Math.floor(z);
+    if (e.tip !== c) { e.tip = c; e.mk.setTooltipContent(c); }
+  }
   function place() {                                    // every frame: the dots of the world shown
     const t = performance.now();
     for (const e of Object.values(live)) {
@@ -433,6 +490,7 @@
       if (here) e.mini.setLatLng(flatLL(x, z));
       const el = e.shown && e.mk.getElement();
       if (el) el.classList.toggle('watched', e.name === watching);
+      if (here && e.mk.isTooltipOpen()) tipTo(e, x, y, z);   // the hover box follows their coordinates
       if (here !== e.shown) {
         e.shown = here;
         if (here) { e.mk.addTo(liveMarks); e.mini.addTo(miniDots); styleOf(e.name, e.mk.getElement()); styleOf(e.name, e.mini.getElement()); }
@@ -456,8 +514,11 @@
       if (!e) {
         e = live[p.name] = { name: p.name, world: p.world, from: pos, to: pos, t0: t, shown: null,
           mk: L.marker([0, 0], { keyboard: false, zIndexOffset: 1000,
-            icon: L.divIcon({ className: 'live', iconSize: [0, 0], html: '<b></b><span></span>' }) }).bindTooltip(p.name),
+            icon: L.divIcon({ className: 'live', iconSize: [0, 0], html: '<b></b><span></span>' }) })
+            // hover box: where they are, under the face (the name tag above says who)
+            .bindTooltip('', { direction: 'bottom', offset: [0, 11 * U()] }),
           mini: L.marker([0, 0], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'minidot', iconSize: [6, 6] }) }) };
+        e.mk.on('tooltipopen', () => tipTo(e, ...now3(e, performance.now())));
         e.mk.on('add', () => { e.mk.getElement().querySelector('span').textContent = p.name; styleOf(p.name, e.mk.getElement()); });
         e.mini.on('add', () => styleOf(p.name, e.mini.getElement()));
         e.mk.on('click', () => watch(p.name));
@@ -472,7 +533,7 @@
       e.to = pos; e.t0 = t;
     }
     for (const n of Object.keys(live)) if (!seen.has(n)) {
-      if (n === watching) unwatch(true);
+      if (n === watching) unwatch();
       liveMarks.removeLayer(live[n].mk); miniDots.removeLayer(live[n].mini); delete live[n];
     }
   }
@@ -499,58 +560,72 @@
       el.hidden = true;
     }
     update(players);
-    drawRoster(players);
-    statsBox();
+    drawPanel();
   }
 
-  // ---- following a player: click their face or name (or a name in the "N online" list) and the view glides to them
-  // and stays on them; turning and zooming keep them in the middle, and a portal takes the view along. Dragging the
-  // map, clicking the minimap or a world button, the x or Esc stops it. The box shows this session's stats, which
-  // livemap.lua counts (an older livemap.lua without them: just the world and position).
-  let watching = null, watchFrom = null, watchT0 = 0, goneTimer = 0;
-  const watchBox = document.getElementById('watch'), ZOOMS = ['scrollWheelZoom', 'doubleClickZoom', 'touchZoom'];
-  function watch(name) {
-    const e = live[name];
-    if (!e) return;
-    clearTimeout(goneTimer);
-    watching = name; watchFrom = map.getCenter(); watchT0 = performance.now();
-    for (const o of ZOOMS) map.options[o] = 'center';             // zoom around them, not around the mouse
-    document.getElementById('w-name').textContent = name;
-    styleOf(name, watchBox.querySelector('.who'));
-    watchBox.hidden = false;
-    document.getElementById('roster').hidden = true;
-    if (e.world !== world) { const [x, , z] = now3(e, performance.now()); show(e.world, x, z, map.getZoom(), rot); }
-    statsBox();
+  // ---- players (bottom left). Closed: "● 3 online  156 players". Open, it grows upward into a list of everyone who
+  // ever joined: who's online first, then everyone else by play time, each with their skin's face and locator bar
+  // colour. A name opens their card: first join, play time, last online, and for someone online this session's
+  // stats (livemap.lua). Clicking someone online (in the list or on the map) also follows them: the view glides to
+  // them and stays on them (zoom keeps them in the middle, a portal takes the view along). Dragging the map, the
+  // minimap, a world button or the Follow button stops following; the card stays. Esc or the bottom line closes it.
+  let watching = null, watchFrom = null, watchT0 = 0, carded = null, ptime = null, ptimeAt = 0;
+  const ZOOMS = ['scrollWheelZoom', 'doubleClickZoom', 'touchZoom'], lastSeen = {};
+  const $ = id => document.getElementById(id);
+  const panel = $('players'), head = $('pl-head'), body = $('pl-body'), listEl = $('pl-list'), card = $('pl-card');
+  async function playtime() {                            // livemap.lua writes it every minute
+    if (document.visibilityState === 'hidden' && ptime) return;
+    try {
+      const d = await (await fetch(m.live.replace(/players\.json$/, 'playtime.json'), { cache: 'no-store' })).json();
+      const t = {};
+      for (const q of d.players || []) if (typeof q.name === 'string') t[q.name.toLowerCase()] = q;
+      for (const n of m.everyone || []) if (typeof n === 'string' && !t[n.toLowerCase()]) t[n.toLowerCase()] = { name: n };
+      ptime = t; ptimeAt = Date.now(); drawPanel();
+    } catch (e) {                                       // not there (an older livemap.lua): the world's names
+      if (!ptime) { ptime = {}; for (const n of m.everyone || []) if (typeof n === 'string') ptime[n.toLowerCase()] = { name: n }; ptimeAt = Date.now(); drawPanel(); }
+    }
   }
-  function unwatch(left) {
-    if (!watching) return;
-    const name = watching;
-    watching = null;
-    for (const o of ZOOMS) map.options[o] = true;
-    if (left) {                                          // say so for a moment instead of just vanishing
-      const s = document.getElementById('w-stats'); s.replaceChildren();
-      const g = document.createElement('dd'); g.className = 'gone'; g.textContent = name + ' left the game'; s.append(g);
-      goneTimer = setTimeout(() => { if (!watching) watchBox.hidden = true; }, 5000);
-    } else watchBox.hidden = true;
-    save();
-  }
+  const hours = s => s < 3600 ? Math.round(s / 60) + 'm' : Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm';
+  const utc = f => new Date(f.replace(' ', 'T') + ':00Z');
+  const joinedOn = f => utc(f).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   function ago(sec) {
     const mins = Math.floor(sec / 60);
     return mins < 1 ? 'just now' : mins < 60 ? mins + 'm' : Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
   }
-  function statsBox() {
-    const e = watching && live[watching];
-    if (!e || !e.p) return;
-    const p = e.p, rows = [['World', p.world === 'nether' ? 'Nether' : 'Overworld'],
-      ['Position', Math.floor(p.x) + ', ' + Math.floor(p.y) + ', ' + Math.floor(p.z)]];
-    if (isFinite(p.joined)) rows.push(['Online for', ago(Date.now() / 1000 - p.joined)]);
-    if (isFinite(p.walked)) rows.push(['Walked', p.walked.toLocaleString() + ' blocks']);
-    if (isFinite(p.mined)) rows.push(['Mined', p.mined.toLocaleString()]);
-    if (isFinite(p.placed)) rows.push(['Placed', p.placed.toLocaleString()]);
-    document.getElementById('w-stats').replaceChildren(...rows.flatMap(([k, v]) => {
-      const dt = document.createElement('dt'), dd = document.createElement('dd');
-      dt.textContent = k; dd.textContent = v; return [dt, dd];
-    }));
+  function agoLong(ms) {
+    const d = Math.floor((Date.now() - ms) / 86400e3);
+    return d < 1 ? ago((Date.now() - ms) / 1000) + (Date.now() - ms < 60e3 ? '' : ' ago') : d === 1 ? 'yesterday' : d < 30 ? d + ' days ago' :
+      new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  const liveName = n => Object.keys(live).find(k => k.toLowerCase() === n.toLowerCase());
+  const known = n => ptime && ptime[n.toLowerCase()];
+
+  function openPanel(on) {
+    body.hidden = !on; panel.classList.toggle('open', on); head.setAttribute('aria-expanded', on);
+    if (!on) { carded = null; unwatch(); }
+    listEl.dataset.key = ''; drawPanel();
+  }
+  function showCard(name) {
+    carded = name; body.hidden = false; panel.classList.add('open'); head.setAttribute('aria-expanded', true);
+    drawPanel();
+  }
+  function watch(name) {
+    const e = live[name];
+    if (!e) return;
+    showCard(name);
+    watching = name; watchFrom = map.getCenter(); watchT0 = performance.now(); wantFollow = null;
+    history.replaceState(null, '', '#follow=' + encodeURIComponent(name));
+    for (const o of ZOOMS) map.options[o] = 'center';             // zoom around them, not around the mouse
+    if (e.world !== world) { const [x, , z] = now3(e, performance.now()); show(e.world, x, z, map.getZoom(), rot); }
+    drawPanel();
+  }
+  let wantFollow = null;                                 // from a #follow=NAME link: follow them once they're online
+  function unwatch() {
+    wantFollow = null;
+    if (!watching) return;
+    watching = null;
+    for (const o of ZOOMS) map.options[o] = true;
+    save(); drawPanel();
   }
   function keepOn(t) {                                   // every frame while following: center on them
     const e = live[watching];
@@ -562,33 +637,110 @@
     const c = map.getCenter();
     if (Math.abs(c.lat - ll.lat) + Math.abs(c.lng - ll.lng) > 0.01) map.setView(ll, map.getZoom(), { animate: false });
   }
-  // the "N online" list
-  function drawRoster(players) {
-    const r = document.getElementById('roster');
-    if (r.hidden) return;
-    // rebuilt only when someone joins or leaves: a button swapped mid-click would lose the click
-    const key = players.map(p => p.name).join('\n');
-    if (r.dataset.key === key && r.children.length) return;
-    r.dataset.key = key;
-    r.replaceChildren(...players.map(p => {
-      const b = document.createElement('button');
-      b.textContent = p.name; b.title = 'Follow ' + p.name;
-      const pr = profiles[p.name] || {};
-      if (/^#[0-9a-f]{6}$/i.test(pr.colour || '')) b.style.setProperty('--c', pr.colour);
-      b.onclick = () => watch(p.name);
-      return b;
-    }));
-    if (!players.length) r.hidden = true;
+  function styled(el, name) {                            // face and colour from profiles.json, if it has them
+    const pr = profiles[name] || {};
+    if (/^#[0-9a-f]{6}$/i.test(pr.colour || '')) el.style.setProperty('--c', pr.colour); else el.style.removeProperty('--c');
+    const face = el.querySelector('.face');
+    const skin = /^https:\/\/textures\.minecraft\.net\/texture\/[0-9a-f]+$/i.test(pr.skin || '') ? pr.skin : null;
+    if (face) face.style.backgroundImage = skin ? 'url("' + skin + '")' : 'none';
   }
-  document.getElementById('online').onclick = () => {
-    const r = document.getElementById('roster');
-    r.hidden = !r.hidden;
-    drawRoster(Object.values(live).map(e => e.p).filter(Boolean));
-  };
-  document.getElementById('online').title = 'Click to see who, then click a name to follow them';
-  document.getElementById('w-close').onclick = () => unwatch();
-  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') unwatch(); });
-  setInterval(statsBox, 15000);                          // "Online for" between polls
+  function drawPanel() {
+    if (!m.live) return;
+    const online = Object.keys(live).filter(n => live[n].p);
+    if (wantFollow) { const ln = liveName(wantFollow); if (ln) { wantFollow = null; watch(ln); return; } }
+    for (const n of online) lastSeen[n.toLowerCase()] = Date.now();
+    $('pl-on').textContent = '● ' + online.length + ' online';
+    panel.hidden = false;
+    if (ptime) {                                         // the counter: how many have ever joined
+      counter(Math.max(Object.keys(ptime).length, Number.isFinite(m.players) ? m.players : 0));
+    }
+    if (body.hidden) return;
+    if (carded) drawCard(); else drawList(online);
+  }
+  function drawList(online) {
+    card.hidden = true; listEl.hidden = false; $('pl-search').hidden = false;
+    // rebuilt only when something in it changes: a row swapped mid-click would lose the click
+    const find = $('pl-search').value.trim().toLowerCase(), hit = n => !find || n.toLowerCase().includes(find);
+    const key = [online.join(','), ptimeAt, profilesAt, find].join('|');
+    if (listEl.dataset.key === key) return;
+    listEl.dataset.key = key;
+    const row = (name, right, isOn) => {
+      const b = document.createElement('button');
+      b.innerHTML = '<b class="face"></b><span class="n"></span><span class="r"></span>';
+      b.querySelector('.n').textContent = name; b.querySelector('.r').textContent = right;
+      b.title = isOn ? 'Follow ' + name : name;
+      styled(b, name);
+      b.onclick = () => isOn ? watch(name) : showCard(name);
+      return b;
+    };
+    const head2 = t => Object.assign(document.createElement('h2'), { textContent: t });
+    const out = [];
+    const onLower = new Set(online.map(n => n.toLowerCase()));
+    const onShown = online.filter(hit);
+    if (onShown.length) {
+      out.push(head2('Online'));
+      for (const n of [...onShown].sort((a, b) => ((known(b) || {}).secs || 0) - ((known(a) || {}).secs || 0)))
+        out.push(row(n, known(n) && known(n).secs ? hours(known(n).secs) : '', true));
+    }
+    if (ptime) {
+      const rest = Object.values(ptime).filter(q => !onLower.has(q.name.toLowerCase()) && hit(q.name));
+      if (rest.length || !onShown.length) out.push(head2(rest.length ? 'Everyone' : 'No one called "' + find + '"'));
+      for (const q of rest.sort((a, b) => (b.secs || 0) - (a.secs || 0) || a.name.localeCompare(b.name)))
+        out.push(row(q.name, q.secs ? hours(q.secs) : '', false));
+    } else out.push(head2('Loading…'));
+    listEl.replaceChildren(...out);
+  }
+  function drawCard() {
+    listEl.hidden = true; card.hidden = false; listEl.dataset.key = ''; $('pl-search').hidden = true;
+    const ln = liveName(carded), e = ln && live[ln], p = e && e.p, q = known(carded);
+    const name = ln || (q && q.name) || carded;
+    $('pl-name').textContent = name;
+    styled(card.querySelector('.who'), name);
+    const f = $('pl-follow');
+    f.hidden = !p;
+    f.textContent = watching === ln ? 'Following' : 'Follow';
+    f.setAttribute('aria-pressed', watching === ln);
+    const rows = [];
+    if (p) {
+      rows.push(['Status', 'Online', 'live'], ['World', p.world === 'nether' ? 'Nether' : 'Overworld'],
+        ['Position', Math.floor(p.x) + ', ' + Math.floor(p.y) + ', ' + Math.floor(p.z)]);
+      if (isFinite(p.joined)) rows.push(['Online for', ago(Date.now() / 1000 - p.joined)]);
+    }
+    // lifetime totals: live while they're online (players.json), else from the player list (playtime.json, 5-min old)
+    const t = p || q || {};
+    if (isFinite(t.walked)) rows.push(['Walked', t.walked.toLocaleString() + ' blocks']);
+    if (isFinite(t.mined)) rows.push(['Mined', t.mined.toLocaleString()]);
+    if (isFinite(t.placed)) rows.push(['Placed', t.placed.toLocaleString()]);
+    if (q && q.first) rows.push(['First joined', joinedOn(q.first)]);
+    if (q && q.secs) rows.push(['Playtime', hours(q.secs)]);
+    if (!p) {
+      const seen = Math.max(q && q.last ? utc(q.last).getTime() : 0, lastSeen[name.toLowerCase()] || 0);
+      if (seen) rows.push(['Last online', agoLong(seen)]);
+    }
+    if (!rows.length) rows.push(['Stats', 'none yet']);  // only in the world's player files: here before livemap.lua
+    $('pl-stats').replaceChildren(...rows.flatMap(([k, v, cls]) => {
+      const dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = k; dd.textContent = v; if (cls) dd.className = cls; return [dt, dd];
+    }));
+  }
+  head.onclick = () => openPanel(body.hidden);
+  $('pl-search').oninput = () => drawPanel();
+  if (m.live) {                                          // the counter opens the list
+    const v = $('visits');
+    v.classList.add('click'); v.tabIndex = 0; v.setAttribute('role', 'button'); v.title = 'Click to see everyone who has played here';
+    v.onclick = () => { carded = null; openPanel(true); };
+    v.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); v.click(); } };
+  }
+  $('pl-back').onclick = () => { unwatch(); carded = null; listEl.dataset.key = ''; drawPanel(); };
+  $('pl-follow').onclick = () => { const ln = liveName(carded); if (watching === ln) unwatch(); else if (ln) watch(ln); };
+  $('online').onclick = () => { carded = null; unwatch(); openPanel(true); };
+  $('online').title = 'Click to see who';
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape' || body.hidden) return;
+    if (ev.target === $('pl-search') && $('pl-search').value) { $('pl-search').value = ''; drawPanel(); return; }
+    openPanel(false);
+  });
+  setInterval(drawPanel, 15000);                         // "Online for" and "Last online" between polls
 
   // the block at the middle of the screen: exact once the heights along the way are in; until then where show() put
   // the view (if it hasn't moved since), else a guess at the usual ground height
@@ -624,6 +776,7 @@
   });
 
   function save() {
+    if (watching) { history.replaceState(null, '', '#follow=' + encodeURIComponent(watching)); return; }   // a link that follows them
     const c = world && center(true);
     if (c) history.replaceState(null, '', '#' + [world, ...c, map.getZoom(), rot].join('/'));
   }
@@ -648,12 +801,16 @@
   document.getElementById('left').onclick = () => show(world, ...center(), map.getZoom(), rot + 3);
   document.getElementById('right').onclick = () => show(world, ...center(), map.getZoom(), rot + 1);
 
-  const h = fromHash(), sp = m.spawn || [0, 0];
+  const followHash = () => { const f = /^#follow=(.+)$/.exec(location.hash); try { return f && decodeURIComponent(f[1]); } catch (e) { return null; } };
+  const h = fromHash(), sp = m.spawn || [0, 0], fh = followHash();   // read before show() rewrites the address
   if (h) await show(...h); else await show('overworld', sp[0], sp[1], 0, 0);
+  if (fh) { showCard(fh); wantFollow = fh; history.replaceState(null, '', '#follow=' + encodeURIComponent(fh)); }
   map.on('move', follow);
   map.on('moveend', () => { if (!watching) save(); });
   map.on('dragstart', () => unwatch());
   window.addEventListener('hashchange', () => {      // a link pasted into the address bar
+    const f = followHash();
+    if (f) { if (!watching || watching.toLowerCase() !== f.toLowerCase()) { showCard(f); wantFollow = f; drawPanel(); } return; }
     const g = fromHash(), c = world && center(true);
     if (g && !(g[0] === world && g[4] === rot && c && g[1] === c[0] && g[2] === c[1] && g[3] === map.getZoom())) show(...g);
   });
@@ -664,6 +821,7 @@
   }
   map.on('mousemove', e => { last = e.latlng; showCoords(e.latlng); });
   if (m.live) {
+    playtime(); setInterval(playtime, 60000);
     poll(); setInterval(poll, 2000); document.addEventListener('visibilitychange', poll);
     // during Leaflet's zoom animation it moves the markers itself; setting them then makes them jump about
     map.on('zoomstart', () => { zooming = true; });

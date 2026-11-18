@@ -8,8 +8,9 @@ directions, and cut into tiles.
 - **Just Python.** One script, no packages to install (Python 3.8 or newer).
 - **A plain static website.** The output is a folder of files. Host it anywhere, including GitHub Pages for free.
 - **Read-only.** It only reads the world and never changes it.
-- **Optional live player dots** if your server writes a small `players.json` (see below). Click a player (or a
-  name in the "online" list) and the view follows them, with their stats in a box.
+- **Optional live players** if your server writes a small `players.json` (see below): dots with faces, and a
+  Players panel listing everyone who has ever joined, with search and a card for each player (play time, first and
+  last time online, blocks mined, placed and walked). Click someone online and the view follows them.
 
 ## What worlds it reads
 
@@ -73,12 +74,25 @@ file every 2 seconds:
 ```
 
 `time` is in Unix seconds; when it's over 30 seconds old the page says the server is offline. `world` is
-`overworld` or `nether`. Each player can also have `joined` (Unix seconds), `mined`, `placed` and `walked`
-(blocks): this session's stats, shown while you follow them. Something on your server has to write that file and serve it over HTTPS with an
-`Access-Control-Allow-Origin: *` header. Then pass its URL with `--live https://example.com/players.json`.
+`overworld` or `nether`. Each player can also have `joined` (Unix seconds, for "Online for"), and `mined`,
+`placed` and `walked` (blocks, lifetime totals). Something on your server has to write that file and serve it over
+HTTPS with an `Access-Control-Allow-Origin: *` header. Then pass its URL with `--live https://example.com/players.json`.
 
-- **Betrock++:** `extras/livemap.lua` writes it (needs the bpa_lua addon; instructions are at the top of the file).
-- **Other servers** (Poseidon, Bukkit and so on) need a small plugin that writes the same file. Pull requests welcome.
+**The Players panel** (bottom left; the "N online" line and the Visitors counter open it too) lists everyone who
+has ever joined: who's online first, then everyone else by play time. Clicking a name shows their card, and clicking
+someone online follows them; a link ending in `#follow=Name` opens the map following that player. The list comes
+from two places:
+
+- the world's `players` folder, read when the map is drawn (only with `--live`, and not with `--no-player-count`),
+  so players from before you set up live players are listed too, just without stats;
+- an optional `playtime.json` next to `players.json`, read every minute:
+  `{"players": [{"name": "Steve", "first": "2026-01-02 15:04", "last": "2026-03-04 18:30", "secs": 7200, "mined": 950, "placed": 1200, "walked": 15000}]}`
+  (`first` and `last` are UTC; every field but `name` is optional).
+
+- **Betrock++:** `extras/livemap.lua` writes both files (needs the bpa_lua addon; instructions are at the top of the
+  file). It keeps its own record in `livemap-players.tsv` in the server folder, so stats count from when you
+  install it.
+- **Other servers** (Poseidon, Bukkit and so on) need a small plugin that writes the same files. Pull requests welcome.
 
 Optionally, a `profiles.json` next to `players.json` gives players a skin face and a colour:
 `{"Steve": {"skin": "https://textures.minecraft.net/texture/...", "colour": "#ff8800"}}`.
