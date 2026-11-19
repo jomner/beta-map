@@ -103,8 +103,11 @@
   .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before, .leaflet-tooltip-left:before, .leaflet-tooltip-right:before { display: none; }
   .spawn { background: #f2c94c; border: var(--u) solid #14161a; }
   .place { background: none; border: 0; }
-  .place span { position: absolute; left: 50%; bottom: calc(2 * var(--u)); transform: translateX(-50%); white-space: nowrap;
-                font: inherit; color: #fff; text-shadow: var(--u) var(--u) 0 var(--shadow); cursor: pointer; }   /* click: go there */
+  /* place names: white on a see-through black bar like a nametag in game; click one to glide there */
+  .place span { position: absolute; left: 50%; bottom: calc(3 * var(--u)); transform: translateX(-50%); white-space: nowrap;
+                font: inherit; color: #fff; background: rgba(0, 0, 0, .4); padding: 0 calc(2 * var(--u)) var(--u);
+                text-shadow: var(--u) var(--u) 0 var(--shadow); cursor: pointer; }
+  .place span:hover { background: rgba(0, 0, 0, .6); }
   .place i { position: absolute; left: 50%; bottom: calc(-2 * var(--u)); width: calc(3 * var(--u)); height: calc(3 * var(--u));
              margin-left: calc(-2 * var(--u)); background: #fff; border: var(--u) solid #000; }
   /* live players: their skin's face (hat layer on top), one skin pixel = u, and their name in their locator bar colour */
@@ -153,10 +156,16 @@
   /* clicking a player on the map follows them */
   .live b, .live span { cursor: pointer; }
   .live span { pointer-events: auto; }
-  /* the followed player: a yellow outline slowly fading to a whiter yellow and back */
-  .live.watched b { box-shadow: 0 0 0 var(--u) #f2c94c; animation: watched 1.6s ease-in-out infinite alternate; }
-  @keyframes watched { to { box-shadow: 0 0 0 var(--u) #fff4b8; } }
-  @media (prefers-reduced-motion: reduce) { .live.watched b { animation: none; } }
+  /* the followed player: 16 light blue pixels on a square ring around their face; a bright one steps round and the
+     ones it passed fade behind it. Each pixel runs the same blink, started 1/16 of a turn after the one before */
+  .live i.ring { display: none; position: absolute; left: 0; top: 0; pointer-events: none; }
+  .live.watched i.ring { display: block; }
+  .live.watched span { bottom: calc(11 * var(--u)); }     /* the name moves up clear of the ring */
+  .live i.ring u { position: absolute; width: calc(2 * var(--u)); height: calc(2 * var(--u)); background: #6ec8ff;
+                   opacity: 0; animation: ring 0.96s steps(1, end) infinite; }
+  @keyframes ring { 0% { opacity: 1; background: #e6f8ff; } 6.25% { opacity: .75; background: #6ec8ff; } 12.5% { opacity: .55; }
+                    18.75% { opacity: .38; } 25% { opacity: .24; } 31.25% { opacity: .12; } 37.5%, 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .live i.ring u { animation: none; opacity: .6; } }
   #pl-head { order: 2; display: flex; gap: calc(6 * var(--u)); justify-content: space-between; align-items: baseline;
              font: inherit; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer;
              text-shadow: var(--u) var(--u) 0 var(--shadow); white-space: nowrap; }
@@ -536,7 +545,7 @@
       if (!e) {
         e = live[p.name] = { name: p.name, world: p.world, from: pos, to: pos, t0: t, shown: null,
           mk: L.marker([0, 0], { keyboard: false, zIndexOffset: 1000,
-            icon: L.divIcon({ className: 'live', iconSize: [0, 0], html: '<b></b><span></span>' }) })
+            icon: L.divIcon({ className: 'live', iconSize: [0, 0], html: '<b></b>' + RING + '<span></span>' }) })
             // hover box: where they are, under the face (the name tag above says who)
             .bindTooltip('', { direction: 'bottom', offset: [0, 11 * U()] }),
           mini: L.marker([0, 0], { interactive: false, keyboard: false, icon: L.divIcon({ className: 'minidot', iconSize: [6, 6] }) }) };
@@ -584,6 +593,19 @@
     update(players);
     drawPanel();
   }
+
+  // ---- the follow ring's 16 pixels: spots 4u apart on a square 8u out from the middle of the face, clockwise from
+  // the top left; pixel i blinks i/16 of a turn after pixel 0 (a negative delay, so it's already turning when shown)
+  const RING = (() => {
+    const spots = [];
+    for (let i = -8; i < 8; i += 4) spots.push([i, -8]);
+    for (let i = -8; i < 8; i += 4) spots.push([8, i]);
+    for (let i = 8; i > -8; i -= 4) spots.push([i, 8]);
+    for (let i = 8; i > -8; i -= 4) spots.push([-8, i]);
+    return '<i class="ring">' + spots.map(([x, y], i) =>
+      '<u style="left:calc(' + (x - 1) + ' * var(--u));top:calc(' + (y - 1) + ' * var(--u));animation-delay:' +
+      (-(spots.length - i) * 0.06).toFixed(2) + 's"></u>').join('') + '</i>';
+  })();
 
   // ---- players (bottom left). Closed: "● 3 online  156 players". Open, it grows upward into a list of everyone who
   // ever joined: who's online first, then everyone else by play time, each with their skin's face and locator bar
