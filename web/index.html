@@ -182,6 +182,11 @@
   #pl-list h2 { margin: calc(2 * var(--u)) calc(2 * var(--u)) var(--u); font: inherit; color: var(--dim);
                 text-shadow: var(--u) var(--u) 0 #000; }
   #pl-list h2:first-child { margin-top: 0; }
+  #pl-list h2.sorted { display: flex; align-items: baseline; gap: calc(4 * var(--u)); }
+  #pl-list h2.sorted span { flex: 1; }
+  /* "Recent" / "Most played": how the Everyone list is ordered (remembered in this browser) */
+  #pl-list h2 button.sort { width: auto; flex: none; padding: 0 calc(2 * var(--u)); color: #f2c94c; }
+  #pl-list h2 button.sort:hover { background: #4a4242; }
   #pl-list button { display: flex; align-items: center; gap: calc(4 * var(--u)); width: 100%; box-sizing: border-box;
                     font: inherit; text-align: left; background: none; border: 0; cursor: pointer;
                     padding: var(--u) calc(2 * var(--u)); color: var(--c, #e8e8e8); text-shadow: var(--u) var(--u) 0 #000; }
@@ -641,7 +646,12 @@
     return d < 1 ? ago((Date.now() - ms) / 1000) + (Date.now() - ms < 60e3 ? '' : ' ago') : d === 1 ? 'yesterday' : d < 30 ? d + ' days ago' :
       new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
-  const liveName = n => Object.keys(live).find(k => k.toLowerCase() === n.toLowerCase());
+  function shortAgo(ms) {                               // for the list's right column: "12m ago", "3h ago", "5d ago"
+    const s = Math.max(0, (Date.now() - ms) / 1000);
+    return s < 3600 ? Math.max(1, Math.floor(s / 60)) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' :
+      s < 60 * 86400 ? Math.floor(s / 86400) + 'd ago' : Math.floor(s / (30 * 86400)) + 'mo ago';
+  }
+  const liveName = n =>Object.keys(live).find(k => k.toLowerCase() === n.toLowerCase());
   const known = n => ptime && ptime[n.toLowerCase()];
 
   function openPanel(on) {
@@ -705,7 +715,8 @@
     card.hidden = true; listEl.hidden = false; $('pl-search').hidden = false;
     // rebuilt only when something in it changes: a row swapped mid-click would lose the click
     const find = $('pl-search').value.trim().toLowerCase(), hit = n => !find || n.toLowerCase().includes(find);
-    const key = [online.join(','), ptimeAt, profilesAt, find].join('|');
+    const recent = prefs.sort !== 'played';             // default: most recently online first
+    const key = [online.join(','), ptimeAt, profilesAt, find, recent].join('|');
     if (listEl.dataset.key === key) return;
     listEl.dataset.key = key;
     const row = (name, right, isOn) => {
@@ -728,9 +739,19 @@
     }
     if (ptime) {
       const rest = Object.values(ptime).filter(q => !onLower.has(q.name.toLowerCase()) && hit(q.name));
-      if (rest.length || !onShown.length) out.push(head2(rest.length ? 'Everyone' : 'No one called "' + find + '"'));
-      for (const q of rest.sort((a, b) => (b.secs || 0) - (a.secs || 0) || a.name.localeCompare(b.name)))
-        out.push(row(q.name, q.secs ? hours(q.secs) : '', false));
+      if (rest.length) {
+        // "Everyone", with a switch: Recent (last online, newest first) or Most played (play time)
+        const h = head2(''); h.className = 'sorted';
+        h.append(Object.assign(document.createElement('span'), { textContent: 'Everyone' }));
+        const s = Object.assign(document.createElement('button'), { className: 'sort', textContent: recent ? 'Recent' : 'Most played' });
+        s.title = recent ? 'Sorted by last online. Click to sort by play time' : 'Sorted by play time. Click to sort by last online';
+        s.onclick = () => { prefs.sort = recent ? 'played' : 'recent'; savePrefs(); drawPanel(); };
+        h.append(s); out.push(h);
+      } else if (!onShown.length) out.push(head2('No one called "' + find + '"'));
+      const seenAt = q => Math.max(q.last ? utc(q.last).getTime() || 0 : 0, lastSeen[q.name.toLowerCase()] || 0);
+      const bySecs = (a, b) => (b.secs || 0) - (a.secs || 0) || a.name.localeCompare(b.name);
+      for (const q of rest.sort(recent ? (a, b) => seenAt(b) - seenAt(a) || bySecs(a, b) : bySecs))
+        out.push(row(q.name, recent ? (seenAt(q) ? shortAgo(seenAt(q)) : '') : (q.secs ? hours(q.secs) : ''), false));
     } else out.push(head2('Loading…'));
     listEl.replaceChildren(...out);
   }
