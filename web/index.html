@@ -669,7 +669,9 @@
       const d = await (await fetch(m.live.replace(/players\.json$/, 'playtime.json'), { cache: 'no-store' })).json();
       const t = {};
       for (const q of d.players || []) if (typeof q.name === 'string') t[q.name.toLowerCase()] = q;
-      for (const n of m.everyone || []) if (typeof n === 'string' && !t[n.toLowerCase()]) t[n.toLowerCase()] = { name: n };
+      // "merged": old names the server counts as another player (a renamed account): not listed on their own
+      const merged = new Set((Array.isArray(d.merged) ? d.merged : []).filter(n => typeof n === 'string').map(n => n.toLowerCase()));
+      for (const n of m.everyone || []) if (typeof n === 'string' && !t[n.toLowerCase()] && !merged.has(n.toLowerCase())) t[n.toLowerCase()] = { name: n };
       ptime = t; ptimeAt = Date.now(); drawPanel();
     } catch (e) {                                       // not there (an older livemap.lua): the world's names
       if (!ptime) { ptime = {}; for (const n of m.everyone || []) if (typeof n === 'string') ptime[n.toLowerCase()] = { name: n }; ptimeAt = Date.now(); drawPanel(); }
