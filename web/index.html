@@ -158,8 +158,10 @@
              overflow-y: auto; box-sizing: border-box; background: rgba(0, 0, 0, .4);
              padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(2 * var(--u)); overflow-wrap: anywhere;
              scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .35) transparent; }
-  #ch-list p { margin: 0 0 calc(2 * var(--u)); color: #fff; text-shadow: var(--u) var(--u) 0 #3f3f3f; line-height: 1.25; }
-  #ch-list time { color: #aaa; text-shadow: var(--u) var(--u) 0 #2a2a2a; margin-right: calc(3 * var(--u)); }
+  /* two columns: the time (right-aligned, so the messages line up) and the message, which wraps under itself */
+  #ch-list p { margin: 0 0 calc(2 * var(--u)); color: #fff; text-shadow: var(--u) var(--u) 0 #3f3f3f; line-height: 1.25;
+               display: grid; grid-template-columns: 5ch 1fr; column-gap: calc(4 * var(--u)); }
+  #ch-list time { color: #6f6f6f; text-shadow: var(--u) var(--u) 0 #1c1c1c; text-align: right; align-self: baseline; }
   #odo { display: flex; gap: var(--u); }
   #odo i { font-style: normal; display: block; width: calc(8 * var(--u)); padding: var(--u) 0 calc(2 * var(--u));
            text-align: center; background: #2e2828; color: var(--text); text-shadow: var(--u) var(--u) 0 #000;
@@ -939,15 +941,20 @@
                8: '555555', 9: '5555ff', a: '55ff55', b: '55ffff', c: 'ff5555', d: 'ff55ff', e: 'ffff55', f: 'ffffff' };
   const shade = h => '#' + [0, 2, 4].map(i => Math.floor(parseInt(h.substr(i, 2), 16) / 4).toString(16).padStart(2, '0')).join('');
   let chat = null, chatKey = '';
-  function chatLine(q) {
-    const p = document.createElement('p'), d = new Date(q.t * 1000);
-    const tm = Object.assign(document.createElement('time'), { textContent: d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) });
-    tm.dateTime = d.toISOString(); tm.title = d.toLocaleString(); p.append(tm);
+  // the time in a narrow column: "5:56" (no AM/PM; hovering shows the full date and time), only when the minute
+  // differs from the line above, like a chat app
+  const clock = d => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s*[AaPp]\.?\s?[Mm]\.?$/, '');
+  function chatLine(q, i, all) {
+    const p = document.createElement('p'), d = new Date(q.t * 1000), msg = document.createElement('span');
+    const tm = document.createElement('time');
+    const prev = i > 0 && clock(new Date(all[i - 1].t * 1000));
+    tm.textContent = prev === clock(d) ? '' : clock(d);
+    tm.dateTime = d.toISOString(); p.title = d.toLocaleString(); p.append(tm, msg);
     const add = (s, c) => {
       if (!s) return;
       const sp = document.createElement('span'); sp.textContent = s;
       if (c) { sp.style.color = '#' + MC[c]; sp.style.textShadow = 'var(--u) var(--u) 0 ' + shade(MC[c]); }
-      p.append(sp);
+      msg.append(sp);
     };
     const parts = String(q.m).split('§'); let col = null;
     add(parts[0], col);
