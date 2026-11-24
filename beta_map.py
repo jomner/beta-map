@@ -20,9 +20,13 @@ import argparse, datetime, glob, gzip, hashlib, io, json, multiprocessing, os, r
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(HERE, 'web')
-VERSION = '1'                                       # bump when the drawing changes: the cache is redrawn
+VERSION = '2'                                       # bump when the drawing changes: the cache is redrawn (2: fog)
 T, MIN_ZOOM = 512, -4
-BG = (20, 22, 26)
+# Where there's no world: the game's own fog colour (Beta 1.7.3: Overworld daytime fog 0.753, 0.847, 1.0; Nether
+# 0.2, 0.03, 0.03), as in beta-map-draw.c. Nether layers are the ones with "nether" in their name.
+BGS = ((192, 216, 255), (51, 8, 8))
+def bg_for(nether): return bytes(BGS[1 if nether else 0])
+def layer_is_nether(path): return 'nether' in os.path.basename(os.path.normpath(path))
 
 # ---------------------------------------------------------------- colours (Beta 1.7.3 block ids)
 COL = {1: (125, 125, 125), 2: (106, 160, 64), 3: (134, 96, 67), 4: (112, 112, 112), 5: (180, 144, 90), 7: (60, 60, 60),
@@ -159,7 +163,8 @@ def block_colour(col, data, base, y):
 # ---------------------------------------------------------------- flat layers (top-down, the minimap)
 def draw_flat(path, nether=False):
     """rgb and heights (both 512x512 bytearrays) for one .mcr file."""
-    rgb = bytearray(bytes(BG) * (T * T)); height = bytearray(T * T); water = bytearray(T * T); seen = bytearray(T * T)
+    bg = bg_for(nether)
+    rgb = bytearray(bg * (T * T)); height = bytearray(T * T); water = bytearray(T * T); seen = bytearray(T * T)
     top = top_nether if nether else top_overworld
     for i, blocks, meta in chunks(path):
         ox, oz = (i % 32) * 16, (i // 32) * 16
@@ -173,7 +178,6 @@ def draw_flat(path, nether=False):
                 height[p] = y; water[p] = col[y] in WATER; seen[p] = 255
                 rgb[3 * p:3 * p + 3] = bytes(block_colour(col, meta, base, y))
     # shading: a block higher than the one north of it is lit, lower is in shadow (water stays flat)
-    bg = bytes(BG)
     for z in range(1, T):
         for x in range(T):
             p = z * T + x
@@ -401,7 +405,7 @@ def iso_compose(regs, cache_of, out_dir, torch_dir):
     tiles in torch_dir (only those with a torch), where anything a region nearer the viewer draws covers them.
     Returns the tiles written, the extent and the torch tiles."""
     tiles, ttiles = {}, {}
-    bg = bytes(BG)
+    bg = bg_for(layer_is_nether(os.path.dirname(os.path.normpath(out_dir))))   # out_dir is <layer>/0
     for rx, rz in sorted(regs, key=lambda r: (r[0] + r[1], r[0])):
         rgb, alpha, tor = iso_load(cache_of[(rx, rz)])
         X0 = (rx - rz) * 1024 - 1022; Y0 = (rx + rz) * 512 - 254
@@ -463,9 +467,9 @@ def iso_compose(regs, cache_of, out_dir, torch_dir):
 
 
 # ---------------------------------------------------------------- zooming out
-def shrink(children):
+def shrink(children, bg):
     """Four 512 px tiles (or None) as a 2x2 block -> one 512 px tile at half the scale."""
-    out = bytearray(bytes(BG) * (T * T)); h = T // 2
+    out = bytearray(bg * (T * T)); h = T // 2
     for (qx, qz), px in children.items():
         if px is None: continue
         for y in range(h):
@@ -480,7 +484,7 @@ def shrink(children):
 def zoom_job(job):
     out, z, px, pz, kids = job
     data = {q: (png_read(os.path.join(out, str(z + 1), '%d_%d.png' % k)) if k else None) for q, k in kids.items()}
-    png_write(os.path.join(out, str(z), '%d_%d.png' % (px, pz)), T, T, shrink(data))
+    png_write(os.path.join(out, str(z), '%d_%d.png' % (px, pz)), T, T, shrink(data, bg_for(layer_is_nether(out))))
 
 
 def zoom_out(pool, out, tiles):

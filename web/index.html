@@ -34,7 +34,8 @@
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
                font: calc(9 * var(--u)) / calc(10 * var(--u)) var(--font); }
-  .leaflet-container { background: var(--bg); font: calc(9 * var(--u)) / calc(10 * var(--u)) var(--font); }
+  /* behind the tiles: the fog colour of the world on show (--void, set by show(); the same as the drawn tiles' edges) */
+  .leaflet-container { background: var(--void, var(--bg)); font: calc(9 * var(--u)) / calc(10 * var(--u)) var(--font); }
   #map { position: absolute; inset: 0; }
   .leaflet-tile { image-rendering: pixelated; image-rendering: crisp-edges; }
 
@@ -325,7 +326,7 @@
   let m;
   try { m = await (await fetch('map.json', { cache: 'no-store' })).json(); }
   catch (e) { document.getElementById('asof').textContent = 'Not drawn yet'; return; }
-  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAABQWGgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';   // see-through: the fog shows
   // where the tiles are: map.json "tiles" (beta-map-draw keeps them in one folder between draws, so the draw's id goes
   // on the end of each address and browsers don't show old ones); older map.json: tiles/<id>
   const TILES = m.tiles || 'tiles/' + m.id, V = m.tiles ? '?v=' + encodeURIComponent(m.id) : '';
@@ -498,6 +499,7 @@
     const newWorld = w !== world;
     if (newWorld) miniY = null;
     world = w; rot = ((k % 4) + 4) % 4;
+    document.documentElement.style.setProperty('--void', w === 'nether' ? '#330808' : '#c0d8ff');   // the game's fog
     if (!m.layers[WORLDS[w].iso + rot]) rot = 0;             // drawn with fewer directions (--views)
     x = Math.floor(x); z = Math.floor(z);
     const y = await heightNow(x, z);

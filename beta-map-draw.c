@@ -49,7 +49,7 @@
 #define MKDIR(p) mkdir(p, 0755)
 #endif
 
-#define DRAW_VERSION "c3"   /* bump when the drawing or the cache changes: everything is redrawn */
+#define DRAW_VERSION "c4"   /* bump when the drawing or the cache changes: everything is redrawn (c4: fog backgrounds) */
 #define MAX_REGION 100000   /* region coordinates beyond this (the world border is at 58,594) are ignored */
 #define T 512
 #define IW 2048
@@ -61,7 +61,9 @@
 
 static int png_level = 1;
 static int NV = 4;          /* how many of the four directions to draw (--views): 1 is a quarter of the work */
-static const unsigned char BG[3] = {20, 22, 26};
+/* Where there's no world: the game's own fog colour (Beta 1.7.3: the Overworld's daytime fog 0.753, 0.847, 1.0; the
+   Nether's 0.2, 0.03, 0.03), so the map's edges fade into it like the edge of view in game. The page uses the same. */
+static const unsigned char BGS[2][3] = {{192, 216, 255}, {51, 8, 8}};
 
 /* ------------------------------------------------------------------ small helpers */
 static void *xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) { fprintf(stderr, "out of memory (%lu bytes)\n", (unsigned long)n); exit(2); } return p; }
@@ -456,6 +458,7 @@ static void row_codes(Reader *r, int q, Columns *c) {
 
 static void read_region(Reader *r, int nether, Columns *c, unsigned char *flat, unsigned char *hp) {
     memset(c->exists, 0, T * T); memset(c->gr, INF, T * T); memset(c->water, 0, T * T);
+    const unsigned char *BG = BGS[nether ? 1 : 0];
     for (int i = 0; i < T * T; i++) memcpy(flat + 3 * i, BG, 3);
     memset(hp, 0, 3 * T * T);
     c->ncodes = 0;
@@ -801,7 +804,7 @@ static void compose_tile(int w, int k, int tx, int ty, unsigned char *buf, unsig
         ord[n].i = i; ord[n].key0 = rx + rz; ord[n].key1 = rx; n++;
     }
     qsort(ord, n, sizeof(Order), cmp_order);
-    for (int i = 0; i < T * T; i++) memcpy(buf + 3 * i, BG, 3);
+    for (int i = 0; i < T * T; i++) memcpy(buf + 3 * i, BGS[w], 3);
     memset(tb, 0, T * T);
     int drawn = 0;
     for (int o = 0; o < n; o++) {
@@ -838,7 +841,7 @@ static void compose_tile(int w, int k, int tx, int ty, unsigned char *buf, unsig
     if (any) tile_write(layer, 0, tx, ty, rgba, 1); else tile_remove(layer, 0, tx, ty);
 }
 
-static void zoom_out(const char *layer, TileSet *dirty, unsigned char *child, unsigned char *out) {
+static void zoom_out(const char *layer, const unsigned char *BG, TileSet *dirty, unsigned char *child, unsigned char *out) {
     TileSet cur = *dirty, next = {0};
     for (int z = -1; z >= MINZ; z--) {
         next.n = 0;
@@ -1117,7 +1120,7 @@ int main(int argc, char **argv) {
     /* the tiles those regions touch, then the zoomed-out ones over them */
     unsigned char *buf = xmalloc(3 * T * T), *tb = xmalloc(T * T), *rgba = xmalloc(4 * T * T);
     for (int w = 0; w < 2; w++) {
-        if (flat_dirty[w].n) { ts_unique(&flat_dirty[w]); zoom_out(FLAT[w], &flat_dirty[w], flat, hp); }
+        if (flat_dirty[w].n) { ts_unique(&flat_dirty[w]); zoom_out(FLAT[w], BGS[w], &flat_dirty[w], flat, hp); }
         for (int k = 0; k < NV; k++) {
             TileSet *s = &iso_dirty[w][k];
             if (!s->n) continue;
@@ -1125,7 +1128,7 @@ int main(int argc, char **argv) {
             char layer[64]; snprintf(layer, sizeof layer, "%s%d", ISO[w], k);
             printf("  %s: %d tile(s) to redo\n", layer, s->n); fflush(stdout);
             for (int i = 0; i < s->n; i++) compose_tile(w, k, s->xy[2 * i], s->xy[2 * i + 1], buf, tb, tmp, rgba);
-            zoom_out(layer, s, flat, hp);
+            zoom_out(layer, BGS[w], s, flat, hp);
         }
     }
     free(buf); free(tb); free(rgba); free(flat); free(hp); free(tmp); free(png_buf);
