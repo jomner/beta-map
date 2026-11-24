@@ -149,22 +149,25 @@
   #prefs:not([hidden]) ~ #visits { bottom: 120px; }
   /* ---- chat (bottom right, above Visitors): the last lines everyone in the game saw (chat.json next to
      players.json, from the server's own script). Read only: nothing can be sent from here */
-  #chat { right: 14px; bottom: var(--chat-bottom, calc(16px + 40 * var(--u))); padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
-          display: flex; flex-direction: column; gap: calc(3 * var(--u)); }
-  #chat.open { width: calc(200 * var(--u)); max-width: calc(100vw - 28px); }
-  #ch-head { order: 2; display: flex; gap: calc(6 * var(--u)); justify-content: space-between; align-items: baseline;
-             font: inherit; color: var(--dim); background: none; border: 0; padding: 0; cursor: pointer;
-             text-shadow: var(--u) var(--u) 0 var(--dim-shadow); white-space: nowrap; }
-  #ch-head:hover, #ch-head[aria-expanded="true"] { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
+  /* Drawn like the game's own chat and like the place names: white text on see-through black, no frame, so the map
+     shows through */
+  #chat { right: 14px; bottom: var(--chat-bottom, calc(16px + 40 * var(--u))); padding: 0;
+          background: none; border: 0; box-shadow: none;
+          display: flex; flex-direction: column; align-items: flex-end; gap: calc(2 * var(--u)); }
+  #chat.open { width: calc(220 * var(--u)); max-width: calc(100vw - 28px); }
+  #ch-head { order: 2; display: flex; gap: calc(6 * var(--u)); align-items: baseline; font: inherit; color: #fff;
+             background: rgba(0, 0, 0, .4); border: 0; padding: var(--u) calc(4 * var(--u)) calc(2 * var(--u));
+             cursor: pointer; text-shadow: var(--u) var(--u) 0 var(--shadow); white-space: nowrap; }
+  #ch-head:hover, #ch-head[aria-expanded="true"] { background: rgba(0, 0, 0, .6); }
   #ch-head:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #ch-head .new { color: #ffff55; text-shadow: var(--u) var(--u) 0 #3f3f15; }
-  #ch-list { order: 1; max-height: min(calc(160 * var(--u)), max(calc(60 * var(--u)), calc(100vh - 200 * var(--u) - 60px)));
-             overflow-y: auto; box-sizing: border-box; background: rgba(0, 0, 0, .55); padding: calc(2 * var(--u)) calc(3 * var(--u));
-             border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
-             border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); overflow-wrap: anywhere; }
-  #ch-list p { margin: 0 0 var(--u); color: #fff; text-shadow: var(--u) var(--u) 0 #3f3f3f; }
-  #ch-list p.empty { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
-  #ch-list time { color: #8a7f7f; text-shadow: none; margin-right: calc(2 * var(--u)); }
+  #ch-list { order: 1; align-self: stretch; max-height: min(calc(160 * var(--u)), max(calc(60 * var(--u)), calc(100vh - 200 * var(--u) - 60px)));
+             overflow-y: auto; box-sizing: border-box; background: rgba(0, 0, 0, .4);
+             padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(2 * var(--u)); overflow-wrap: anywhere;
+             scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .35) transparent; }
+  #ch-list p { margin: 0 0 calc(2 * var(--u)); color: #fff; text-shadow: var(--u) var(--u) 0 #3f3f3f; line-height: 1.25; }
+  #ch-list p.empty { color: #aaa; text-shadow: var(--u) var(--u) 0 #2a2a2a; }
+  #ch-list time { color: #aaa; text-shadow: var(--u) var(--u) 0 #2a2a2a; margin-right: calc(3 * var(--u)); }
   #odo { display: flex; gap: var(--u); }
   #odo i { font-style: normal; display: block; width: calc(8 * var(--u)); padding: var(--u) 0 calc(2 * var(--u));
            text-align: center; background: #2e2828; color: var(--text); text-shadow: var(--u) var(--u) 0 #000;
