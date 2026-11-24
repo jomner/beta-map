@@ -27,9 +27,6 @@
           --down: #726467; --down-hi: #b9aeab; --down-lo: #2b2628;
           --well: #a89995;
           --text: #fff; --shadow: #3f3f3f; --dim: #c3b9b4; --dim-shadow: #6f6669;
-          /* labels on the grey panels: dark, no shadow, like the game's own GUI labels ("Crafting", "Inventory");
-             light grey on this grey was 1.8:1, this is about 4.4:1 */
-          --label: #2b2628;
           --font: Monocraft, ui-monospace, Consolas, monospace; }
   /* small screens, and phones held sideways (wide but short): the smaller scale */
   @media (max-width: 600px), (max-height: 500px) { :root { --u: 1px; } }
@@ -49,7 +46,7 @@
   #title { top: 14px; left: 62px; padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
            max-width: calc(100vw - 330px); }
   #title h1 { margin: 0; font: inherit; }
-  #title p { margin: var(--u) 0 0; color: var(--label); text-shadow: none; }
+  #title p { margin: var(--u) 0 0; color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
   #title p#online { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
   #side { top: 14px; right: 14px; width: calc(120 * var(--u)); padding: calc(3 * var(--u));
           display: grid; gap: calc(3 * var(--u)); }
@@ -145,7 +142,7 @@
      click it for the list */
   #visits { bottom: 16px; right: 14px; padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
             display: grid; gap: calc(2 * var(--u)); justify-items: center; }
-  #visits .lbl { color: var(--label); text-shadow: none; }
+  #visits .lbl { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
   #visits.click { cursor: pointer; }
   #visits.click:hover .lbl { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
   #visits:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: calc(2 * var(--u)); }
@@ -191,8 +188,7 @@
              font: inherit; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer;
              text-shadow: var(--u) var(--u) 0 var(--shadow); white-space: nowrap; }
   #pl-head .on { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
-  #pl-head .all { color: var(--label); text-shadow: none; }
-  #pl-head .on.none { color: var(--label); text-shadow: none; }       /* "0 online" / "Server offline": not green */
+  #pl-head .all { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
   #pl-head:hover .all, #pl-head[aria-expanded="true"] .all { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
   #pl-head:focus-visible, #players button:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #pl-body { order: 1; display: grid; gap: calc(3 * var(--u)); }
@@ -242,7 +238,7 @@
     background: var(--down); padding-top: var(--u); padding-bottom: 0;
     border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
   #pl-card dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
-  #pl-card dt { color: var(--label); text-shadow: none; }
+  #pl-card dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
   #pl-card dd { margin: 0; text-align: right; }
   #pl-card dd.live { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
   /* the coordinates box: click it to copy them */
@@ -749,10 +745,9 @@
     const online = Object.keys(live).filter(n => live[n].p);
     if (wantFollow) { const ln = liveName(wantFollow); if (ln) { wantFollow = null; watch(ln); return; } }
     for (const n of online) lastSeen[n.toLowerCase()] = Date.now();
-    // green only when someone's on; "Server offline" when the live file is old or unreachable
+    // "Server offline" when the live file is old or unreachable
     const onEl = $('pl-on');
     onEl.textContent = liveOff ? 'Server offline' : '● ' + online.length + ' online';
-    onEl.classList.toggle('none', liveOff || !online.length);
     panel.hidden = false;
     if (ptime) {                                         // the counter: how many have ever joined
       counter(Math.max(Object.keys(ptime).length, Number.isFinite(m.players) ? m.players : 0));
