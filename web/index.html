@@ -147,6 +147,24 @@
   #visits.click:hover .lbl { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
   #visits:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: calc(2 * var(--u)); }
   #prefs:not([hidden]) ~ #visits { bottom: 120px; }
+  /* ---- chat (bottom right, above Visitors): the last lines everyone in the game saw (chat.json next to
+     players.json, from the server's own script). Read only: nothing can be sent from here */
+  #chat { right: 14px; bottom: var(--chat-bottom, calc(16px + 40 * var(--u))); padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
+          display: flex; flex-direction: column; gap: calc(3 * var(--u)); }
+  #chat.open { width: calc(200 * var(--u)); max-width: calc(100vw - 28px); }
+  #ch-head { order: 2; display: flex; gap: calc(6 * var(--u)); justify-content: space-between; align-items: baseline;
+             font: inherit; color: var(--dim); background: none; border: 0; padding: 0; cursor: pointer;
+             text-shadow: var(--u) var(--u) 0 var(--dim-shadow); white-space: nowrap; }
+  #ch-head:hover, #ch-head[aria-expanded="true"] { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
+  #ch-head:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
+  #ch-head .new { color: #ffff55; text-shadow: var(--u) var(--u) 0 #3f3f15; }
+  #ch-list { order: 1; max-height: min(calc(160 * var(--u)), max(calc(60 * var(--u)), calc(100vh - 200 * var(--u) - 60px)));
+             overflow-y: auto; box-sizing: border-box; background: rgba(0, 0, 0, .55); padding: calc(2 * var(--u)) calc(3 * var(--u));
+             border: solid; border-width: calc(2 * var(--u)) var(--u) var(--u) var(--u);
+             border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); overflow-wrap: anywhere; }
+  #ch-list p { margin: 0 0 var(--u); color: #fff; text-shadow: var(--u) var(--u) 0 #3f3f3f; }
+  #ch-list p.empty { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #ch-list time { color: #8a7f7f; text-shadow: none; margin-right: calc(2 * var(--u)); }
   #odo { display: flex; gap: var(--u); }
   #odo i { font-style: normal; display: block; width: calc(8 * var(--u)); padding: var(--u) 0 calc(2 * var(--u));
            text-align: center; background: #2e2828; color: var(--text); text-shadow: var(--u) var(--u) 0 #000;
@@ -268,6 +286,11 @@
 <div id="visits" class="panel" hidden><span class="lbl">Visitors</span><span id="odo" role="img"></span></div>
 <!-- players: everyone who ever joined (map.json "everyone" from the world's player files, and playtime.json from
      livemap.lua), faces and colours (profiles.json), who's online and their stats (players.json from livemap.lua) -->
+<!-- chat: chat.json next to players.json, if the server writes one -->
+<div id="chat" class="panel" hidden>
+  <button id="ch-head" aria-expanded="false" aria-controls="ch-list" title="What's being said in the game (read only)"><span>Chat</span><span class="new" id="ch-new"></span></button>
+  <div id="ch-list" hidden aria-live="polite"></div>
+</div>
 <div id="players" class="panel" hidden>
   <button id="pl-head" aria-expanded="false" aria-controls="pl-body" title="Everyone who has played here"><span class="all">Players</span><span class="on" id="pl-on"></span></button>
   <div id="pl-body" hidden>
@@ -914,7 +937,82 @@
   coords.onclick = copyCoords;
   coords.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); copyCoords(); } };
   map.on('mousemove', e => { last = e.latlng; showCoords(e.latlng); });
+  // ---- chat (bottom right): chat.json beside players.json, which the server's script rewrites (at most every 2 s)
+  // when something is said. Asked every 2 s while open, every 10 s while closed (for the "N new" mark). No chat.json:
+  // no panel. Lines keep the game's § colour codes, drawn here in the game's colours.
+  const chatEl = $('chat'), chHead = $('ch-head'), chList = $('ch-list'), chNew = $('ch-new');
+  const MC = { 0: '000000', 1: '0000aa', 2: '00aa00', 3: '00aaaa', 4: 'aa0000', 5: 'aa00aa', 6: 'ffaa00', 7: 'aaaaaa',
+               8: '555555', 9: '5555ff', a: '55ff55', b: '55ffff', c: 'ff5555', d: 'ff55ff', e: 'ffff55', f: 'ffffff' };
+  const shade = h => '#' + [0, 2, 4].map(i => Math.floor(parseInt(h.substr(i, 2), 16) / 4).toString(16).padStart(2, '0')).join('');
+  let chat = null, chatSeen = 0, chatTick = 0, chatOpen = !!prefs.chatOpen, chatKey = '';
+  function chatLine(q) {
+    const p = document.createElement('p'), d = new Date(q.t * 1000);
+    const tm = Object.assign(document.createElement('time'), { textContent: d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) });
+    tm.dateTime = d.toISOString(); tm.title = d.toLocaleString(); p.append(tm);
+    const add = (s, c) => {
+      if (!s) return;
+      const sp = document.createElement('span'); sp.textContent = s;
+      if (c) { sp.style.color = '#' + MC[c]; sp.style.textShadow = 'var(--u) var(--u) 0 ' + shade(MC[c]); }
+      p.append(sp);
+    };
+    const parts = String(q.m).split('§'); let col = null;
+    add(parts[0], col);
+    for (const s of parts.slice(1)) {
+      const c = s.charAt(0).toLowerCase();
+      if (c in MC) col = c; else if (c === 'r') col = null;
+      add(s.slice(1), col);
+    }
+    return p;
+  }
+  function placeChat() {                                 // just above the Visitors box, wherever that is
+    const v = $('visits');
+    const above = v && !v.hidden ? window.innerHeight - v.getBoundingClientRect().top + 6 : 16;
+    chatEl.style.setProperty('--chat-bottom', above + 'px');
+  }
+  function drawChat() {
+    if (!chat) return;
+    const lines = chat.lines, lastId = lines.length ? lines[lines.length - 1].id : 0;
+    placeChat();
+    if (!chatOpen) {
+      const n = lines.filter(q => q.id > chatSeen).length;
+      chNew.textContent = n ? n + ' new' : '';
+      return;
+    }
+    chatSeen = lastId; chNew.textContent = '';
+    const key = chat.start + ':' + lastId;
+    if (key === chatKey) return;
+    chatKey = key;
+    const atEnd = chList.scrollHeight - chList.scrollTop - chList.clientHeight < 20;   // reading older lines: stay put
+    chList.replaceChildren(...(lines.length ? lines.map(chatLine)
+      : [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Nothing said since the server started.' })]));
+    if (atEnd || !chList.dataset.drawn) chList.scrollTop = chList.scrollHeight;
+    chList.dataset.drawn = 1;
+  }
+  async function pollChat() {
+    try {
+      const r = await fetch(m.live.replace(/players\.json$/, 'chat.json'), { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d || !Array.isArray(d.lines)) return;
+      const lines = d.lines.filter(q => q && Number.isFinite(q.id) && Number.isFinite(q.t) && typeof q.m === 'string');
+      // first look, or the server restarted (ids begin again): what's there now counts as already seen
+      if (!chat || chat.start !== d.start) chatSeen = chatOpen || !chat ? (lines.length ? lines[lines.length - 1].id : 0) : 0;
+      chat = { start: d.start, lines };
+      chatEl.hidden = false;
+      drawChat();
+    } catch (e) { /* no chat.json here: no chat panel */ }
+  }
+  function openChat(on) {
+    chatOpen = on; prefs.chatOpen = on; savePrefs();
+    chatEl.classList.toggle('open', on); chHead.setAttribute('aria-expanded', on); chList.hidden = !on;
+    chatKey = ''; delete chList.dataset.drawn;
+    drawChat(); if (on) pollChat();
+  }
+  chHead.onclick = () => openChat(!chatOpen);
+  window.addEventListener('resize', placeChat);
   if (m.live) {
+    openChat(chatOpen); pollChat();
+    setInterval(() => { if (document.visibilityState !== 'hidden' && (chatOpen || ++chatTick % 5 === 0)) pollChat(); }, 2000);
     playtime(); setInterval(playtime, 60000);
     poll(); setInterval(poll, 2000); document.addEventListener('visibilitychange', poll);
     // during Leaflet's zoom animation it moves the markers itself; setting them then makes them jump about
