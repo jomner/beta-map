@@ -27,8 +27,12 @@
           --down: #726467; --down-hi: #b9aeab; --down-lo: #2b2628;
           --well: #a89995;
           --text: #fff; --shadow: #3f3f3f; --dim: #c3b9b4; --dim-shadow: #6f6669;
+          /* labels on the grey panels: dark, no shadow, like the game's own GUI labels ("Crafting", "Inventory");
+             light grey on this grey was 1.8:1, this is about 4.4:1 */
+          --label: #2b2628;
           --font: Monocraft, ui-monospace, Consolas, monospace; }
-  @media (max-width: 600px) { :root { --u: 1px; } }
+  /* small screens, and phones held sideways (wide but short): the smaller scale */
+  @media (max-width: 600px), (max-height: 500px) { :root { --u: 1px; } }
   * { border-radius: 0 !important; }
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -45,7 +49,7 @@
   #title { top: 14px; left: 62px; padding: calc(3 * var(--u)) calc(5 * var(--u)) calc(4 * var(--u));
            max-width: calc(100vw - 330px); }
   #title h1 { margin: 0; font: inherit; }
-  #title p { margin: var(--u) 0 0; color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #title p { margin: var(--u) 0 0; color: var(--label); text-shadow: none; }
   #title p#online { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
   #side { top: 14px; right: 14px; width: calc(120 * var(--u)); padding: calc(3 * var(--u));
           display: grid; gap: calc(3 * var(--u)); }
@@ -60,8 +64,8 @@
   #well { padding: calc(2 * var(--u)); }
   #mini { width: 100%; aspect-ratio: 1; cursor: pointer; display: block; }
   .row { display: flex; gap: calc(3 * var(--u)); }
-  .row span { flex: 2; display: grid; place-items: center; color: var(--dim);
-              text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  .row span { flex: 2; display: grid; place-items: center; color: var(--text);
+              text-shadow: var(--u) var(--u) 0 var(--shadow); }   /* "NW": white, like other text (grey on the well was 1.4:1) */
 
   /* buttons */
   .row button, .leaflet-bar a, .leaflet-bar a:first-child, .leaflet-bar a:last-child {
@@ -137,12 +141,11 @@
   #players { left: 14px; bottom: calc(16px + 27 * var(--u)); padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
              display: flex; flex-direction: column; gap: calc(3 * var(--u)); }
   #players.open { width: calc(184 * var(--u)); max-width: calc(100vw - 28px); }
-  @media (hover: none) { #players { bottom: 16px; } }      /* phones: no coordinates box under it */
   /* "Visitors": players who ever joined, an old-web hit counter: each digit in its own sunk slot; with live players,
      click it for the list */
   #visits { bottom: 16px; right: 14px; padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
             display: grid; gap: calc(2 * var(--u)); justify-items: center; }
-  #visits .lbl { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #visits .lbl { color: var(--label); text-shadow: none; }
   #visits.click { cursor: pointer; }
   #visits.click:hover .lbl { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
   #visits:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: calc(2 * var(--u)); }
@@ -154,7 +157,10 @@
   /* Always there (no open/close), and only while there's something to show: empty after a restart, it's hidden */
   #chat { right: 14px; bottom: var(--chat-bottom, calc(16px + 40 * var(--u))); padding: 0;
           background: none; border: 0; box-shadow: none; width: calc(220 * var(--u)); max-width: calc(100vw - 28px); }
-  #ch-list { max-height: min(calc(160 * var(--u)), max(calc(60 * var(--u)), calc(100vh - 200 * var(--u) - 60px)));
+  /* placeChat() sets --chat-max to the room between Visitors and the side panel (and hides the chat, .away, when
+     there's too little, or when the open Players panel would cover it) */
+  #chat.away { display: none; }
+  #ch-list { max-height: var(--chat-max, calc(160 * var(--u)));
              overflow-y: auto; box-sizing: border-box; background: rgba(0, 0, 0, .4);
              padding: calc(3 * var(--u)) calc(4 * var(--u)) calc(2 * var(--u)); overflow-wrap: anywhere;
              scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .35) transparent; }
@@ -185,7 +191,8 @@
              font: inherit; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer;
              text-shadow: var(--u) var(--u) 0 var(--shadow); white-space: nowrap; }
   #pl-head .on { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
-  #pl-head .all { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #pl-head .all { color: var(--label); text-shadow: none; }
+  #pl-head .on.none { color: var(--label); text-shadow: none; }       /* "0 online" / "Server offline": not green */
   #pl-head:hover .all, #pl-head[aria-expanded="true"] .all { color: var(--text); text-shadow: var(--u) var(--u) 0 var(--shadow); }
   #pl-head:focus-visible, #players button:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #pl-body { order: 1; display: grid; gap: calc(3 * var(--u)); }
@@ -219,7 +226,12 @@
   /* min-width 0 (on the card, a grid item, and on the name): a long name shrinks (ending in "…") instead of pushing
      the Follow button out of the panel */
   #pl-card { min-width: 0; }
-  #pl-card .who span { flex: 1; min-width: 0; color: var(--c, #e8e8e8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the name in their colour with the black outline the names on the map have: many colours vanish on the grey */
+  #pl-card .who span { flex: 1; min-width: 0; color: var(--c, #e8e8e8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                       padding: var(--u);
+                       text-shadow: var(--u) 0 0 #000, calc(-1 * var(--u)) 0 0 #000, 0 var(--u) 0 #000, 0 calc(-1 * var(--u)) 0 #000,
+                                    var(--u) var(--u) 0 #000, calc(-1 * var(--u)) calc(-1 * var(--u)) 0 #000,
+                                    var(--u) calc(-1 * var(--u)) 0 #000, calc(-1 * var(--u)) var(--u) 0 #000; }
   /* the card's buttons: the same look and press as the panel's other buttons (.row button), just smaller */
   #players .btn { flex: none; font: inherit; color: var(--text); background: var(--btn); cursor: pointer;
                   padding: 0 calc(3 * var(--u)) var(--u); text-shadow: var(--u) var(--u) 0 var(--shadow);
@@ -230,20 +242,32 @@
     background: var(--down); padding-top: var(--u); padding-bottom: 0;
     border-color: var(--down-lo) var(--down-hi) var(--down-hi) var(--down-lo); }
   #pl-card dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: var(--u) calc(6 * var(--u)); }
-  #pl-card dt { color: var(--dim); text-shadow: var(--u) var(--u) 0 var(--dim-shadow); }
+  #pl-card dt { color: var(--label); text-shadow: none; }
   #pl-card dd { margin: 0; text-align: right; }
   #pl-card dd.live { color: #6dff5a; text-shadow: var(--u) var(--u) 0 #1b3f16; }
-  /* "N online" in the title opens the list */
-  #title p#online { cursor: pointer; }
-  #title p#online:hover { text-decoration: underline; }
-  @media (hover: none) { #players { bottom: 16px; } }      /* phones: no coordinates box under it */
   /* the coordinates box: click it to copy them */
   #coords { cursor: pointer; }
   #coords:hover { background: var(--btn-hover); }
   #coords:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #coords.copied { color: #ffff55; text-shadow: var(--u) var(--u) 0 #3f3f15; }   /* the game's yellow */
-  @media (hover: none) { #coords { display: none; } }
-  @media (max-width: 600px) {
+  /* touch screens have no mouse to point with: a small cross marks the middle of the screen, and the coordinates
+     box says the block under it */
+  #cross { position: absolute; left: 50%; top: 50%; z-index: 500; pointer-events: none; width: 11px; height: 11px;
+           transform: translate(-50%, -50%); display: none; }
+  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px #000; }
+  #cross::before { left: 5px; top: 0; width: 1px; height: 11px; }
+  #cross::after { top: 5px; left: 0; height: 1px; width: 11px; }
+  @media (hover: none) { #cross { display: block; } }
+  /* finger-sized targets on touch screens and small ones; the text stays the same size */
+  @media (hover: none), (max-width: 600px) {
+    #pl-head { padding: 7px 0; }
+    #pl-list button { min-height: 30px; }
+    #pl-list h2 button.sort { min-height: 26px; padding: 0 8px; }
+    #players .btn { min-width: 30px; min-height: 28px; }
+    /* 16 px: iPhones zoom the whole page into any smaller text box when it's tapped */
+    #pl-search { font-size: 16px; line-height: 20px; padding: 5px 8px 6px; }
+  }
+  @media (max-width: 600px), (max-height: 500px) {
     #side { width: calc(152 * var(--u)); }
     #prefs { width: calc(152 * var(--u)); }
     #title { max-width: calc(100vw - 236px); }
@@ -261,7 +285,8 @@
 </head>
 <body>
 <div id="map"></div>
-<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p><p id="online" hidden></p></div>
+<div id="cross" aria-hidden="true"></div>
+<div id="title" class="panel"><h1 id="name">Beta map</h1><p id="asof">Loading…</p><p id="next" hidden></p></div>
 <div id="side" class="panel">
   <div id="well"><div id="mini" title="Click to go there"></div></div>
   <div class="row" role="group" aria-label="World">
@@ -290,7 +315,7 @@
 <div id="players" class="panel" hidden>
   <button id="pl-head" aria-expanded="false" aria-controls="pl-body" title="Everyone who has played here"><span class="all">Players</span><span class="on" id="pl-on"></span></button>
   <div id="pl-body" hidden>
-    <input id="pl-search" type="search" placeholder="Search players" aria-label="Search players" autocomplete="off" spellcheck="false">
+    <input id="pl-search" type="search" placeholder="Search" aria-label="Search players" autocomplete="off" spellcheck="false">
     <div id="pl-list"></div>
     <div id="pl-card" hidden>
       <div class="who"><button class="btn" id="pl-back" title="Back to the list" aria-label="Back to the list">&lt;</button><b class="face"></b><span id="pl-name"></span><button class="btn" id="pl-follow">Follow</button></div>
@@ -319,13 +344,15 @@
     odo.dataset.n = s;
     odo.replaceChildren(...[...s].map((c, i) => { const e = document.createElement('i'); e.textContent = c; if (i < lead) e.className = 'lead'; return e; }));
     odo.setAttribute('aria-label', n + ' players have joined');
-    document.getElementById('visits').hidden = false;
+    const vEl = document.getElementById('visits'); vEl.hidden = false;
+    if (!vEl.title) vEl.title = 'Players who have joined the server';   // ("Visitors" is the hit-counter look; it counts players)
   }
   if (Number.isFinite(m.players)) counter(m.players);
   // when the world was last saved: map.json has it in UTC, shown in the viewer's own time zone
-  const d = new Date(m.taken.replace(' ', 'T') + ':00Z');
-  document.getElementById('asof').textContent =
-    d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  // ("Map from ...": a date alone didn't say what it was. The time zone only where there's room for it.)
+  const d = new Date(m.taken.replace(' ', 'T') + ':00Z'), roomy = innerWidth > 600;
+  document.getElementById('asof').textContent = (roomy ? 'Map from ' : 'Map: ') +
+    d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', ...(roomy ? { timeZoneName: 'short' } : {}) });
 
   // When the map is next redrawn (only with --every): map.json "next" is {"every": hours, "first": hours after
   // midnight UTC of the day's first redraw}. Worked out from the clock, not asked of anything: for the first 10
@@ -339,7 +366,8 @@
       else {
         const t = new Date(last + slot), mins = Math.ceil((t - now) / 60e3);
         const left = mins >= 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + 'm';
-        nextEl.textContent = 'Next update ' + t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + ' (in ' + left + ')';
+        nextEl.textContent = roomy ? 'Next update ' + t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) + ' (in ' + left + ')'
+          : 'Next update in ' + left;
       }
       nextEl.hidden = false;
     };
@@ -514,7 +542,7 @@
   // A player's feet are on the top of the block under them.
   const liveMarks = L.layerGroup().addTo(map), miniDots = L.layerGroup().addTo(mini);
   const live = {};                                      // name -> { mk, mini, world, from, to, t0 }
-  let profiles = {}, profilesAt = 0, zooming = false;
+  let profiles = {}, profilesAt = 0, zooming = false, liveOff = false;   // liveOff: players.json old or unreachable
   const GLIDE = 2000;
   function toLLf(xf, zf, feet) {
     const [a, b] = turn(xf, zf, rot);
@@ -594,7 +622,6 @@
   }
   async function poll() {
     if (!m.live || document.visibilityState === 'hidden') return;
-    const el = document.getElementById('online');
     let players = [];
     try {
       const r = await fetch(m.live, { cache: 'no-store' });
@@ -602,8 +629,7 @@
       players = (d.players || []).filter(p => typeof p.name === 'string' && isFinite(p.x) && isFinite(p.y) && isFinite(p.z));
       const old = Date.now() / 1000 - d.time > 30;      // the server isn't writing: down or restarting
       if (old) players = [];
-      el.hidden = false;
-      el.textContent = old ? 'live: server offline' : '● ' + players.length + ' online';
+      liveOff = old;                                    // the Players header and the chat say so
       if (players.some(p => !profiles[p.name]) && Date.now() - profilesAt > 10000 || Date.now() - profilesAt > 300000) {
         profilesAt = Date.now();
         try {
@@ -612,7 +638,7 @@
         } catch (e) { /* no skins or colours yet: plain dots */ }
       }
     } catch (e) {                                       // the live file isn't reachable: just no dots
-      el.hidden = true;
+      liveOff = true;
     }
     update(players);
     drawPanel();
@@ -673,14 +699,15 @@
   const liveName = n =>Object.keys(live).find(k => k.toLowerCase() === n.toLowerCase());
   const known = n => ptime && ptime[n.toLowerCase()];
 
+  let onPanelChange = () => {};                          // the chat moves out of the way (set further down)
   function openPanel(on) {
     body.hidden = !on; panel.classList.toggle('open', on); head.setAttribute('aria-expanded', on);
     if (!on) { carded = null; unwatch(); }
-    listEl.dataset.key = ''; drawPanel();
+    listEl.dataset.key = ''; drawPanel(); onPanelChange();
   }
   function showCard(name) {
     carded = name; body.hidden = false; panel.classList.add('open'); head.setAttribute('aria-expanded', true);
-    drawPanel();
+    drawPanel(); onPanelChange();
   }
   function watch(name) {
     const e = live[name];
@@ -722,7 +749,10 @@
     const online = Object.keys(live).filter(n => live[n].p);
     if (wantFollow) { const ln = liveName(wantFollow); if (ln) { wantFollow = null; watch(ln); return; } }
     for (const n of online) lastSeen[n.toLowerCase()] = Date.now();
-    $('pl-on').textContent = '● ' + online.length + ' online';
+    // green only when someone's on; "Server offline" when the live file is old or unreachable
+    const onEl = $('pl-on');
+    onEl.textContent = liveOff ? 'Server offline' : '● ' + online.length + ' online';
+    onEl.classList.toggle('none', liveOff || !online.length);
     panel.hidden = false;
     if (ptime) {                                         // the counter: how many have ever joined
       counter(Math.max(Object.keys(ptime).length, Number.isFinite(m.players) ? m.players : 0));
@@ -811,14 +841,12 @@
   $('pl-search').oninput = () => drawPanel();
   if (m.live) {                                          // the counter opens the list
     const v = $('visits');
-    v.classList.add('click'); v.tabIndex = 0; v.setAttribute('role', 'button'); v.title = 'Click to see everyone who has played here';
+    v.classList.add('click'); v.tabIndex = 0; v.setAttribute('role', 'button'); v.title = 'Players who have joined the server. Click to see them all';
     v.onclick = () => { carded = null; openPanel(true); };
     v.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); v.click(); } };
   }
   $('pl-back').onclick = () => { unwatch(); carded = null; listEl.dataset.key = ''; drawPanel(); };
   $('pl-follow').onclick = () => { const ln = liveName(carded); if (watching === ln) unwatch(); else if (ln) watch(ln); };
-  $('online').onclick = () => { carded = null; unwatch(); openPanel(true); };
-  $('online').title = 'Click to see who';
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape' || body.hidden) return;
     if (ev.target === $('pl-search') && $('pl-search').value) { $('pl-search').value = ''; drawPanel(); return; }
@@ -933,6 +961,10 @@
   coords.onclick = copyCoords;
   coords.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); copyCoords(); } };
   map.on('mousemove', e => { last = e.latlng; showCoords(e.latlng); });
+  // Touch screens: the block under the cross in the middle of the screen. Everywhere: filled in from the start (it
+  // said "x –, z –" until the mouse moved).
+  if (matchMedia('(hover: none)').matches) map.on('move', () => { last = map.getCenter(); showCoords(last); });
+  last = map.getCenter(); showCoords(last);
   // ---- chat (bottom right): chat.json beside players.json, which the server's script rewrites (at most every 2 s)
   // when something is said. Asked every 2 s; always shown while it has lines (no chat.json, or nothing said since the
   // server started: nothing shown). Lines keep the game's § colour codes, drawn here in the game's colours.
@@ -947,8 +979,8 @@
   function chatLine(q, i, all) {
     const p = document.createElement('p'), d = new Date(q.t * 1000), msg = document.createElement('span');
     const tm = document.createElement('time');
-    const prev = i > 0 && clock(new Date(all[i - 1].t * 1000));
-    tm.textContent = prev === clock(d) ? '' : clock(d);
+    // same minute as the line above: by the time itself, not the shown text ("5:56" can be AM, PM or another day)
+    tm.textContent = i > 0 && Math.floor(all[i - 1].t / 60) === Math.floor(q.t / 60) ? '' : clock(d);
     tm.dateTime = d.toISOString(); p.title = d.toLocaleString(); p.append(tm, msg);
     const add = (s, c) => {
       if (!s) return;
@@ -960,22 +992,41 @@
     add(parts[0], col);
     for (const s of parts.slice(1)) {
       const c = s.charAt(0).toLowerCase();
-      if (c in MC) col = c; else if (c === 'r') col = null;
+      col = c in MC ? c : null;                         // like the game: any other code (§r, §l, ...) means white
       add(s.slice(1), col);
     }
     return p;
   }
-  function placeChat() {                                 // just above the Visitors box, wherever that is
-    const v = $('visits');
-    const above = v && !v.hidden ? window.innerHeight - v.getBoundingClientRect().top + 6 : 16;
-    chatEl.style.setProperty('--chat-bottom', above + 'px');
+  // Just above the Visitors box, and never over the side panel (minimap, world and turn buttons) above it: as tall as
+  // the room between them allows. With too little room (a phone held sideways), or when the open Players panel would
+  // cover it (narrow screens), it steps aside until there's room again.
+  function placeChat() {
+    const v = $('visits'), s = $('side');
+    const bottom = v && !v.hidden ? innerHeight - v.getBoundingClientRect().top + 6 : 16;
+    const top = s && !s.hidden ? s.getBoundingClientRect().bottom + 8 : 14;
+    const u = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 2;
+    const room = innerHeight - bottom - top;
+    chatEl.style.setProperty('--chat-bottom', bottom + 'px');
+    chatEl.style.setProperty('--chat-max', Math.max(0, Math.min(room, 160 * u)) + 'px');
+    chatEl.classList.remove('away');
+    let away = room < 40;
+    if (!away && !chatEl.hidden && panel.classList.contains('open')) {
+      const a = panel.getBoundingClientRect(), b = chatEl.getBoundingClientRect();
+      away = a.right > b.left && a.left < b.right && a.top < b.bottom && a.bottom > b.top;
+    }
+    chatEl.classList.toggle('away', away);
   }
+  onPanelChange = placeChat;
+  // Lines older than CHAT_HOURS aren't shown (a quiet server's last words from yesterday read as if just said), and
+  // none while the server is offline.
+  const CHAT_HOURS = 12;
   function drawChat() {
     if (!chat) return;
-    const lines = chat.lines, lastId = lines.length ? lines[lines.length - 1].id : 0;
+    const since = Date.now() / 1000 - CHAT_HOURS * 3600;
+    const lines = chat.lines.filter(q => q.t > since), lastId = lines.length ? lines[lines.length - 1].id : 0;
+    chatEl.hidden = !lines.length || liveOff;
     placeChat();
-    chatEl.hidden = !lines.length;
-    const key = chat.start + ':' + lastId;
+    const key = chat.start + ':' + lastId + ':' + lines.length;
     if (key === chatKey) return;
     chatKey = key;
     const atEnd = chList.scrollHeight - chList.scrollTop - chList.clientHeight < 20;   // reading older lines: stay put
