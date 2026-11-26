@@ -247,13 +247,15 @@
   #coords:hover { background: var(--btn-hover); }
   #coords:focus-visible { outline: var(--u) solid #f2c94c; outline-offset: var(--u); }
   #coords.copied { color: #ffff55; text-shadow: var(--u) var(--u) 0 #3f3f15; }   /* the game's yellow */
-  /* touch screens have no mouse to point with: a small cross marks the middle of the screen, and the coordinates
-     box says the block under it */
-  #cross { position: absolute; left: 50%; top: 50%; z-index: 500; pointer-events: none; width: 11px; height: 11px;
-           transform: translate(-50%, -50%); display: none; }
-  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px #000; }
-  #cross::before { left: 5px; top: 0; width: 1px; height: 11px; }
-  #cross::after { top: 5px; left: 0; height: 1px; width: 11px; }
+  /* touch screens have no mouse to point with: a cross marks the middle of the screen, and the coordinates box says
+     the block under it. One white plus with one dark outline around the whole shape (not around each bar, which
+     cut through the middle), on whole pixels so it stays sharp. */
+  #cross { position: absolute; left: 50%; top: 50%; left: round(down, 50%, 1px); top: round(down, 50%, 1px);
+           z-index: 500; pointer-events: none; width: 16px; height: 16px; margin: -8px 0 0 -8px; display: none;
+           background: linear-gradient(#fff, #fff) center / 2px 100% no-repeat,
+                       linear-gradient(#fff, #fff) center / 100% 2px no-repeat;
+           filter: drop-shadow(1px 0 0 rgba(0,0,0,.7)) drop-shadow(-1px 0 0 rgba(0,0,0,.7))
+                   drop-shadow(0 1px 0 rgba(0,0,0,.7)) drop-shadow(0 -1px 0 rgba(0,0,0,.7)); }
   @media (hover: none) { #cross { display: block; } }
   /* finger-sized targets on touch screens and small ones; the text stays the same size */
   @media (hover: none), (max-width: 600px) {
